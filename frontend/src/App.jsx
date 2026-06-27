@@ -1272,6 +1272,156 @@ export default function App() {
 
   const empStatusColor=(s)=>s==="Active"?"#86efac":s==="Probation"?"#fcd34d":s==="Suspended"?"#f87171":"#94a3b8";
 
+  function downloadVAListPDF() {
+    const monthLabel = (() => {
+      const [yr, mo] = currentMonth.split("-");
+      return `${MONTHS[parseInt(mo,10)-1]} ${yr}`;
+    })();
+
+    const filtered = accounts.filter(a=>!vaSearch||a.vaName.toLowerCase().includes(vaSearch.toLowerCase())||a.storeName.toLowerCase().includes(vaSearch.toLowerCase()));
+    const grouped = {};
+    filtered.forEach(a=>{ if(!grouped[a.vaName]) grouped[a.vaName]=[]; grouped[a.vaName].push(a); });
+
+    let grandProfit=0, grandVA=0, grandPen=0;
+
+    const vaRows = Object.entries(grouped).map(([vaName, stores])=>{
+      const totalProfit = stores.reduce((s,a)=>s+(parseFloat(getEntry(a.id).totalProfit)||0),0);
+      const totalPen = stores.reduce((s,a)=>{const e=getEntry(a.id);return s+(parseFloat(e.hmrcFee)||0)+(parseFloat(e.counterfeit)||0)+(parseFloat(e.leavesPenalty)||0)+(parseFloat(e.feedbackDed)||0)+(parseFloat(e.lateArrival)||0)+(parseFloat(e.warningPenalty)||0)+(parseFloat(e.otherPenalty)||0);},0);
+      const totalVA = stores.reduce((s,a)=>{const e=getEntry(a.id);const p=parseFloat(e.totalProfit)||0;const pen=(parseFloat(e.hmrcFee)||0)+(parseFloat(e.counterfeit)||0)+(parseFloat(e.leavesPenalty)||0)+(parseFloat(e.feedbackDed)||0)+(parseFloat(e.lateArrival)||0)+(parseFloat(e.warningPenalty)||0)+(parseFloat(e.otherPenalty)||0);return s+(p*(a.vaPct/100)-pen);},0);
+      grandProfit+=totalProfit; grandVA+=totalVA; grandPen+=totalPen;
+
+      const storeRows = stores.map(a=>{
+        const e=getEntry(a.id);
+        const profit=parseFloat(e.totalProfit)||0;
+        const pen=(parseFloat(e.hmrcFee)||0)+(parseFloat(e.counterfeit)||0)+(parseFloat(e.leavesPenalty)||0)+(parseFloat(e.feedbackDed)||0)+(parseFloat(e.lateArrival)||0)+(parseFloat(e.warningPenalty)||0)+(parseFloat(e.otherPenalty)||0);
+        const vaEarn=(profit*(a.vaPct/100))-pen;
+        const bank=a.bankName?`${a.bankName} | ${a.accountNo}`:"—";
+        const deptColor={OnBuy:"#f97316",eBay:"#f59e0b",Amazon:"#ef4444","TikTok Shop":"#8b5cf6"}[a.dept]||"#6366f1";
+        return `<tr>
+          <td>${a.storeName}</td>
+          <td><span style="background:${deptColor}22;color:${deptColor};padding:1px 6px;border-radius:4px;font-size:10px">${a.dept}</span></td>
+          <td style="color:#94a3b8">${a.clientPct}%</td>
+          <td style="color:#94a3b8">${a.agencyPct}%</td>
+          <td style="color:#94a3b8">${a.vaPct}%</td>
+          <td style="color:#e2e8f0;font-weight:500">£${profit.toFixed(2)}</td>
+          <td style="color:#86efac;font-weight:600">£${vaEarn.toFixed(2)}</td>
+          <td style="color:#f87171">£${pen.toFixed(2)}</td>
+          <td style="color:#94a3b8;font-size:10px">${bank}</td>
+        </tr>`;
+      }).join("");
+
+      return `
+        <div class="va-block">
+          <div class="va-header">
+            <div class="va-avatar">${vaName[0].toUpperCase()}</div>
+            <div class="va-info">
+              <div class="va-name">${vaName}</div>
+              <div class="va-meta">${stores.length} store${stores.length>1?"s":""}</div>
+            </div>
+            <div class="va-summary">
+              <span class="summary-label">Net Earning</span>
+              <span class="va-earn">£${totalVA.toFixed(2)}</span>
+            </div>
+          </div>
+          <table>
+            <thead><tr>
+              <th>Store</th><th>Dept</th><th>Client%</th><th>Agency%</th><th>VA%</th>
+              <th>Profit</th><th>VA Earning</th><th>Penalties</th><th>Bank</th>
+            </tr></thead>
+            <tbody>${storeRows}</tbody>
+          </table>
+          <div class="va-totals">
+            <div class="total-box blue">
+              <div class="total-label">Store Profit</div>
+              <div class="total-val">£${totalProfit.toFixed(2)}</div>
+            </div>
+            <div class="total-box green">
+              <div class="total-label">VA Net Earning</div>
+              <div class="total-val">£${totalVA.toFixed(2)}</div>
+            </div>
+            <div class="total-box red">
+              <div class="total-label">Penalties</div>
+              <div class="total-val">£${totalPen.toFixed(2)}</div>
+            </div>
+          </div>
+        </div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>VA List — ${monthLabel}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#0a0b11;color:#e2e8f0;padding:24px;font-size:12px}
+  .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1)}
+  .page-title{font-size:20px;font-weight:700;color:#fff}
+  .page-meta{font-size:12px;color:#94a3b8}
+  .grand-totals{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+  .grand-box{border-radius:10px;padding:14px;text-align:center}
+  .grand-box.blue{background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3)}
+  .grand-box.green{background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.25)}
+  .grand-box.red{background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25)}
+  .grand-label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+  .grand-val{font-size:18px;font-weight:700}
+  .grand-box.blue .grand-val{color:#a5b4fc}
+  .grand-box.green .grand-val{color:#86efac}
+  .grand-box.red .grand-val{color:#f87171}
+  .va-block{background:#13151f;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;margin-bottom:14px;page-break-inside:avoid}
+  .va-header{display:flex;align-items:center;padding:12px 14px;gap:10;background:rgba(255,255,255,0.02)}
+  .va-avatar{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#f59e0b,#f97316);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;margin-right:10px}
+  .va-info{flex:1}
+  .va-name{font-size:13px;font-weight:600;color:#fff}
+  .va-meta{font-size:10px;color:#64748b;margin-top:2px}
+  .va-summary{text-align:right}
+  .summary-label{display:block;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em}
+  .va-earn{font-size:14px;font-weight:700;color:#86efac}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th{text-align:left;padding:7px 10px;font-size:9px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid rgba(255,255,255,0.06)}
+  td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.03);color:#e2e8f0}
+  .va-totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 14px;background:rgba(0,0,0,0.2)}
+  .total-box{border-radius:7px;padding:8px 10px}
+  .total-box.blue{background:rgba(99,102,241,0.1);border:0.5px solid rgba(99,102,241,0.2)}
+  .total-box.green{background:rgba(34,197,94,0.08);border:0.5px solid rgba(34,197,94,0.2)}
+  .total-box.red{background:rgba(239,68,68,0.08);border:0.5px solid rgba(239,68,68,0.2)}
+  .total-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+  .total-val{font-size:13px;font-weight:600;color:#fff}
+  .total-box.green .total-val{color:#86efac}
+  .total-box.red .total-val{color:#f87171}
+  .footer{margin-top:20px;text-align:center;font-size:10px;color:#334155;border-top:1px solid rgba(255,255,255,0.06);padding-top:12px}
+  @media print{
+    body{background:#fff;color:#1e293b;padding:16px}
+    .page-header,.grand-box,.va-block,.total-box,.grand-box{border-color:rgba(0,0,0,0.12)!important;background:rgba(0,0,0,0.03)!important}
+    .va-name,.grand-val,.total-val,.va-earn{color:#1e293b!important}
+    th,td{color:#374151!important}
+    .summary-label,.va-meta,.grand-label,.total-label{color:#6b7280!important}
+    .page-title{color:#111827!important}
+    .footer{color:#9ca3af!important;border-color:rgba(0,0,0,0.1)!important}
+  }
+</style></head><body>
+<div class="page-header">
+  <div>
+    <div class="page-title">VA List Report</div>
+    <div class="page-meta">${monthLabel} &nbsp;·&nbsp; ${Object.keys(grouped).length} VAs &nbsp;·&nbsp; ${filtered.length} Stores</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:11px;color:#64748b">E-Commerce Maneka</div>
+    <div style="font-size:10px;color:#475569">Generated ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</div>
+  </div>
+</div>
+<div class="grand-totals">
+  <div class="grand-box blue"><div class="grand-label">Total Store Profit</div><div class="grand-val">£${grandProfit.toFixed(2)}</div></div>
+  <div class="grand-box green"><div class="grand-label">Total VA Earnings</div><div class="grand-val">£${grandVA.toFixed(2)}</div></div>
+  <div class="grand-box red"><div class="grand-label">Total Penalties</div><div class="grand-val">£${grandPen.toFixed(2)}</div></div>
+</div>
+${vaRows}
+<div class="footer">E-Commerce Maneka ERP &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; ${monthLabel}</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+
+    const w = window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+  }
+
   // ── EMPLOYEES PANEL ──
   const EmployeesPanel = (
     <div style={{flex:1,overflowY:"auto",padding:"16px 26px"}}>
@@ -1504,9 +1654,13 @@ export default function App() {
       {/* VA LIST TAB */}
       {empTab==="va"&&(
         <div>
-          <div style={{display:"flex",gap:8,marginBottom:16}}>
+          <div style={{display:"flex",gap:8,marginBottom:16,alignItems:"center"}}>
             <input value={vaSearch} onChange={e=>setVaSearch(e.target.value)} placeholder="Search VA or Store..." style={{background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",borderRadius:9,padding:"8px 14px",color:"#fff",fontSize:12.5,outline:"none",width:250,fontFamily:"inherit"}}/>
-            <div style={{marginLeft:"auto",fontSize:12,color:"rgba(255,255,255,0.4)",lineHeight:"36px"}}>{accounts.length} VAs / Stores</div>
+            <button onClick={downloadVAListPDF} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,background:"rgba(99,102,241,0.15)",border:"0.5px solid rgba(99,102,241,0.35)",borderRadius:8,padding:"7px 14px",color:"#a5b4fc",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v8M5 7l3 3 3-3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+              Download PDF
+            </button>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",lineHeight:"36px"}}>{accounts.length} VAs / Stores</div>
           </div>
 
           {/* Group by VA name */}
