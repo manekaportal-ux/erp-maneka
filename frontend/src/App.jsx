@@ -316,6 +316,18 @@ export default function App() {
   const [emailConfig, setEmailConfig] = useState({user:"",pass:""});
   const [sendingInvoice, setSendingInvoice] = useState(null);
   const [invoicePreview, setInvoicePreview] = useState(null); // {client, type, stores, totals}
+  const [expenses, setExpenses] = useState([]);
+  const [donations, setDonations] = useState([]);
+  const [financeTab, setFinanceTab] = useState("expenses");
+  const [expFilter, setExpFilter] = useState("All");
+  const [showAddExp, setShowAddExp] = useState(false);
+  const [editExpId, setEditExpId] = useState(null);
+  const [newExp, setNewExp] = useState({date:new Date().toISOString().split("T")[0],category:"Other",description:"",amountGbp:"",amountPkr:"",notes:""});
+  const [editExp, setEditExp] = useState({});
+  const [showAddDon, setShowAddDon] = useState(false);
+  const [editDonId, setEditDonId] = useState(null);
+  const [newDon, setNewDon] = useState({name:"",address:"",bankName:"",accountNo:"",accountTitle:"",monthlyAmount:"",currency:"PKR",paymentMethod:"Bank Transfer",status:"Active",notes:""});
+  const [editDon, setEditDon] = useState({});
 
   // Auto update month
   useEffect(() => {
@@ -327,14 +339,15 @@ export default function App() {
 
   async function fetchAll() {
     try {
-      const [ra,re,rr,rt,rc,rcs,rec,rem,rct,rsp] = await Promise.all([
+      const [ra,re,rr,rt,rc,rcs,rec,rem,rct,rsp,rex,rdn] = await Promise.all([
         fetch(`${API}/api/accounts`),fetch(`${API}/api/entries`),
         fetch(`${API}/api/rate`),fetch(`${API}/api/va-trash`),
         fetch(`${API}/api/clients`),fetch(`${API}/api/client-stores`),
         fetch(`${API}/api/email-config`),fetch(`${API}/api/employees`),
-        fetch(`${API}/api/client-trash`),fetch(`${API}/api/salary-payments`)
+        fetch(`${API}/api/client-trash`),fetch(`${API}/api/salary-payments`),
+        fetch(`${API}/api/expenses`),fetch(`${API}/api/donations`)
       ]);
-      const [da,de,dr,dt,dc,dcs,dec,dem,dct,dsp] = await Promise.all([ra.json(),re.json(),rr.json(),rt.json(),rc.json(),rcs.json(),rec.json(),rem.json(),rct.json(),rsp.json()]);
+      const [da,de,dr,dt,dc,dcs,dec,dem,dct,dsp,dex,ddn] = await Promise.all([ra.json(),re.json(),rr.json(),rt.json(),rc.json(),rcs.json(),rec.json(),rem.json(),rct.json(),rsp.json(),rex.json(),rdn.json()]);
       if (Array.isArray(da)) setAccounts(da);
       if (de&&typeof de==="object") setEntries(de);
       if (dr.rate) setRate(Number(dr.rate));
@@ -345,6 +358,8 @@ export default function App() {
       if (Array.isArray(dem)) setEmployees(dem);
       if (Array.isArray(dct)) setClientTrash(dct.map(c=>({...c,expiresAt:c.expires_at,deletedAt:c.deleted_at})));
       if (Array.isArray(dsp)) setSalaryPayments(dsp);
+      if (Array.isArray(dex)) setExpenses(dex);
+      if (Array.isArray(ddn)) setDonations(ddn);
     } catch(e) {}
   }
 
@@ -605,11 +620,13 @@ export default function App() {
           {id:"reports",icon:"📈",label:"Analytics & Reports"},
           {id:"clients",icon:"👤",label:"Clients"},
           {id:"employees",icon:"👥",label:"Employees"},
+          {id:"finance",icon:"💰",label:"Finance"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]:[
           {id:"monthly",icon:"📅",label:"Monthly Sheet"},
           {id:"clients",icon:"👤",label:"Clients"},
           {id:"employees",icon:"👥",label:"Employees"},
+          {id:"finance",icon:"💰",label:"Finance"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]).map(nav=>{
           const isActive=activeNav===nav.id;
@@ -631,7 +648,7 @@ export default function App() {
   const Topbar = (
     <div style={{padding:"18px 26px 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexShrink:0}}>
       <div>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":activeNav==="finance"?"Finance":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
         <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.03em"}}>{activeDept==="All"?"All Departments":activeDept}</div>
         <div style={{fontSize:12,color:"rgba(255,255,255,0.35)",marginTop:3}}>
           <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:"#22c55e",marginRight:5,verticalAlign:"middle"}}></span>
@@ -2430,6 +2447,304 @@ ${vaRows}
     </div>
   );
 
+  // ── FINANCE PANEL ──
+  const EXP_CATS = ["All","Rent","Salary","Software","Marketing","Travel","Utilities","Equipment","Tax","Other"];
+  const CAT_COLORS = {Rent:"#f97316",Salary:"#6366f1",Software:"#8b5cf6",Marketing:"#ec4899",Travel:"#06b6d4",Utilities:"#f59e0b",Equipment:"#22c55e",Tax:"#ef4444",Other:"#94a3b8"};
+
+  const now = new Date();
+  const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const thisYearStr = `${now.getFullYear()}`;
+
+  const filteredExp = expenses.filter(e=> expFilter==="All"||e.category===expFilter);
+  const expThisMonth = expenses.filter(e=>e.date&&e.date.startsWith(thisMonthStr)).reduce((s,e)=>s+(parseFloat(e.amount_gbp)||0),0);
+  const expThisYear  = expenses.filter(e=>e.date&&e.date.startsWith(thisYearStr)).reduce((s,e)=>s+(parseFloat(e.amount_gbp)||0),0);
+  const expAllTime   = expenses.reduce((s,e)=>s+(parseFloat(e.amount_gbp)||0),0);
+  const donActive    = donations.filter(d=>d.status==="Active");
+  const donTotalPKR  = donActive.reduce((s,d)=>s+(parseFloat(d.monthly_amount)||0),0);
+
+  async function saveExpense() {
+    if (!newExp.description) return alert("Description required");
+    try {
+      const r = await fetch(`${API}/api/expenses`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:newExp.date,category:newExp.category,description:newExp.description,amountGbp:parseFloat(newExp.amountGbp)||0,amountPkr:parseFloat(newExp.amountPkr)||0,currency:"GBP",notes:newExp.notes})});
+      const d = await r.json();
+      if (d.id) { setExpenses(prev=>[d,...prev]); setShowAddExp(false); setNewExp({date:new Date().toISOString().split("T")[0],category:"Other",description:"",amountGbp:"",amountPkr:"",notes:""}); }
+    } catch(e) { alert("Error saving expense"); }
+  }
+
+  async function updateExpense(id) {
+    try {
+      await fetch(`${API}/api/expenses/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:editExp.date,category:editExp.category,description:editExp.description,amountGbp:parseFloat(editExp.amount_gbp)||0,amountPkr:parseFloat(editExp.amount_pkr)||0,currency:"GBP",notes:editExp.notes||""})});
+      setExpenses(prev=>prev.map(e=>e.id===id?{...e,...editExp,amount_gbp:parseFloat(editExp.amount_gbp)||0,amount_pkr:parseFloat(editExp.amount_pkr)||0}:e));
+      setEditExpId(null);
+    } catch(e) { alert("Error updating"); }
+  }
+
+  async function deleteExpense(id) {
+    if (!confirm("Delete this expense?")) return;
+    await fetch(`${API}/api/expenses/${id}`,{method:"DELETE"});
+    setExpenses(prev=>prev.filter(e=>e.id!==id));
+  }
+
+  async function saveDonation() {
+    if (!newDon.name) return alert("Name required");
+    try {
+      const r = await fetch(`${API}/api/donations`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:newDon.name,address:newDon.address,bankName:newDon.bankName,accountNo:newDon.accountNo,accountTitle:newDon.accountTitle,monthlyAmount:parseFloat(newDon.monthlyAmount)||0,currency:newDon.currency,paymentMethod:newDon.paymentMethod,status:newDon.status,notes:newDon.notes})});
+      const d = await r.json();
+      if (d.id) { setDonations(prev=>[...prev,d]); setShowAddDon(false); setNewDon({name:"",address:"",bankName:"",accountNo:"",accountTitle:"",monthlyAmount:"",currency:"PKR",paymentMethod:"Bank Transfer",status:"Active",notes:""}); }
+    } catch(e) { alert("Error saving"); }
+  }
+
+  async function updateDonation(id) {
+    try {
+      await fetch(`${API}/api/donations/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:editDon.name,address:editDon.address||"",bankName:editDon.bank_name||"",accountNo:editDon.account_no||"",accountTitle:editDon.account_title||"",monthlyAmount:parseFloat(editDon.monthly_amount)||0,currency:editDon.currency||"PKR",paymentMethod:editDon.payment_method||"Bank Transfer",status:editDon.status||"Active",notes:editDon.notes||""})});
+      setDonations(prev=>prev.map(d=>d.id===id?{...d,...editDon,monthly_amount:parseFloat(editDon.monthly_amount)||0}:d));
+      setEditDonId(null);
+    } catch(e) { alert("Error updating"); }
+  }
+
+  async function deleteDonation(id) {
+    if (!confirm("Delete this donation recipient?")) return;
+    await fetch(`${API}/api/donations/${id}`,{method:"DELETE"});
+    setDonations(prev=>prev.filter(d=>d.id!==id));
+  }
+
+  const inp = {width:"100%",background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"8px 10px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+  const sel = {...inp,background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)"};
+
+  const FinancePanel = (
+    <div style={{flex:1,overflowY:"auto",padding:"16px 26px"}}>
+      {/* Tabs */}
+      <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"0.5px solid rgba(255,255,255,0.06)"}}>
+        {[["expenses","💸 Expenses"],["donations","🤲 Donations"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setFinanceTab(id)} style={{padding:"8px 18px",fontSize:12.5,cursor:"pointer",color:financeTab===id?"#fff":"rgba(255,255,255,0.35)",background:"none",border:"none",borderBottom:financeTab===id?"2px solid #6366f1":"2px solid transparent",fontFamily:"inherit",fontWeight:financeTab===id?500:400,marginBottom:-0.5}}>{lbl}</button>
+        ))}
+      </div>
+
+      {/* ── EXPENSES TAB ── */}
+      {financeTab==="expenses"&&(
+        <div>
+          {/* Summary Cards */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+            {[
+              {label:"This Month",val:`£${expThisMonth.toFixed(2)}`,color:"#6366f1",bg:"rgba(99,102,241,0.1)",border:"rgba(99,102,241,0.2)"},
+              {label:"This Year",val:`£${expThisYear.toFixed(2)}`,color:"#f59e0b",bg:"rgba(245,158,11,0.1)",border:"rgba(245,158,11,0.2)"},
+              {label:"All Time",val:`£${expAllTime.toFixed(2)}`,color:"#ef4444",bg:"rgba(239,68,68,0.1)",border:"rgba(239,68,68,0.2)"},
+            ].map(c=>(
+              <div key={c.label} style={{background:c.bg,border:`0.5px solid ${c.border}`,borderRadius:12,padding:16}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{c.label}</div>
+                <div style={{fontSize:22,fontWeight:700,color:c.color}}>{c.val}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Category filter + Add button */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+            {EXP_CATS.map(cat=>(
+              <button key={cat} onClick={()=>setExpFilter(cat)} style={{padding:"4px 12px",fontSize:11.5,borderRadius:6,cursor:"pointer",fontFamily:"inherit",border:`0.5px solid ${expFilter===cat?(CAT_COLORS[cat]||"#6366f1"):"rgba(255,255,255,0.1)"}`,background:expFilter===cat?`${CAT_COLORS[cat]||"#6366f1"}22`:"transparent",color:expFilter===cat?(CAT_COLORS[cat]||"#6366f1"):"rgba(255,255,255,0.4)",fontWeight:expFilter===cat?500:400}}>{cat}</button>
+            ))}
+            <button onClick={()=>{setShowAddExp(v=>!v);setEditExpId(null);}} style={{marginLeft:"auto",background:"rgba(99,102,241,0.15)",border:"0.5px solid rgba(99,102,241,0.35)",borderRadius:8,padding:"6px 14px",color:"#a5b4fc",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+              {showAddExp?"✕ Cancel":"＋ Add Expense"}
+            </button>
+          </div>
+
+          {/* Add Expense Form */}
+          {showAddExp&&(
+            <div style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.25)",borderRadius:12,padding:16,marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:500,marginBottom:12,color:"#a5b4fc"}}>New Expense</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 1fr",gap:8,marginBottom:10}}>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Date</div><input type="date" value={newExp.date} onChange={e=>setNewExp({...newExp,date:e.target.value})} style={inp}/></div>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Category</div>
+                  <select value={newExp.category} onChange={e=>setNewExp({...newExp,category:e.target.value})} style={sel}>
+                    {EXP_CATS.slice(1).map(c=><option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Description *</div><input placeholder="Description" value={newExp.description} onChange={e=>setNewExp({...newExp,description:e.target.value})} style={inp}/></div>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Amount GBP</div><input type="number" placeholder="0.00" value={newExp.amountGbp} onChange={e=>setNewExp({...newExp,amountGbp:e.target.value})} style={inp}/></div>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Amount PKR</div><input type="number" placeholder="0" value={newExp.amountPkr} onChange={e=>setNewExp({...newExp,amountPkr:e.target.value})} style={inp}/></div>
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+                <div style={{flex:1}}><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Notes (optional)</div><input placeholder="Notes..." value={newExp.notes} onChange={e=>setNewExp({...newExp,notes:e.target.value})} style={inp}/></div>
+                <button onClick={saveExpense} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12.5,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>Save</button>
+              </div>
+            </div>
+          )}
+
+          {/* Expenses Table */}
+          <div style={{background:"#13151f",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:12,overflow:"hidden"}}>
+            {filteredExp.length===0?(
+              <div style={{padding:48,textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:13}}>No expenses{expFilter!=="All"?` in ${expFilter}`:""}</div>
+            ):(
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
+                <thead><tr style={{borderBottom:"0.5px solid rgba(255,255,255,0.07)"}}>
+                  {["Date","Category","Description","GBP","PKR","Notes",""].map(h=>(
+                    <th key={h} style={{textAlign:"left",padding:"10px 12px",fontSize:10,fontWeight:500,color:"rgba(255,255,255,0.28)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {filteredExp.map(e=>{
+                    const cc=CAT_COLORS[e.category]||"#94a3b8";
+                    if (editExpId===e.id) return (
+                      <tr key={e.id} style={{borderBottom:"0.5px solid rgba(99,102,241,0.15)",background:"rgba(99,102,241,0.05)"}}>
+                        <td style={{padding:"8px 12px"}}><input type="date" value={editExp.date||""} onChange={ev=>setEditExp({...editExp,date:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12}}/></td>
+                        <td style={{padding:"8px 12px"}}>
+                          <select value={editExp.category||""} onChange={ev=>setEditExp({...editExp,category:ev.target.value})} style={{...sel,padding:"5px 8px",fontSize:12}}>
+                            {EXP_CATS.slice(1).map(c=><option key={c}>{c}</option>)}
+                          </select>
+                        </td>
+                        <td style={{padding:"8px 12px"}}><input value={editExp.description||""} onChange={ev=>setEditExp({...editExp,description:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12}}/></td>
+                        <td style={{padding:"8px 12px"}}><input type="number" value={editExp.amount_gbp||""} onChange={ev=>setEditExp({...editExp,amount_gbp:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12,width:80}}/></td>
+                        <td style={{padding:"8px 12px"}}><input type="number" value={editExp.amount_pkr||""} onChange={ev=>setEditExp({...editExp,amount_pkr:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12,width:90}}/></td>
+                        <td style={{padding:"8px 12px"}}><input value={editExp.notes||""} onChange={ev=>setEditExp({...editExp,notes:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12}}/></td>
+                        <td style={{padding:"8px 12px"}}>
+                          <div style={{display:"flex",gap:5}}>
+                            <button onClick={()=>updateExpense(e.id)} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Save</button>
+                            <button onClick={()=>setEditExpId(null)} style={{background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.5)",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                    return (
+                      <tr key={e.id} style={{borderBottom:"0.5px solid rgba(255,255,255,0.04)"}}>
+                        <td style={{padding:"10px 12px",color:"rgba(255,255,255,0.5)",fontSize:11.5}}>{e.date?new Date(e.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—"}</td>
+                        <td style={{padding:"10px 12px"}}><span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:`${cc}18`,color:cc,fontWeight:500}}>{e.category}</span></td>
+                        <td style={{padding:"10px 12px",color:"#fff",fontWeight:500}}>{e.description}</td>
+                        <td style={{padding:"10px 12px",color:"#86efac",fontWeight:600}}>£{parseFloat(e.amount_gbp||0).toFixed(2)}</td>
+                        <td style={{padding:"10px 12px",color:"rgba(255,255,255,0.5)"}}>{parseFloat(e.amount_pkr||0)>0?`₨${parseFloat(e.amount_pkr).toLocaleString()}`:"—"}</td>
+                        <td style={{padding:"10px 12px",color:"rgba(255,255,255,0.35)",fontSize:11.5}}>{e.notes||"—"}</td>
+                        <td style={{padding:"10px 12px"}}>
+                          <div style={{display:"flex",gap:5}}>
+                            <button onClick={()=>{setEditExpId(e.id);setEditExp({...e});setShowAddExp(false);}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                            <button onClick={()=>deleteExpense(e.id)} style={{background:"rgba(239,68,68,0.1)",color:"#f87171",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Del</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── DONATIONS TAB ── */}
+      {financeTab==="donations"&&(
+        <div>
+          {/* Summary */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+            <div style={{background:"rgba(99,102,241,0.1)",border:"0.5px solid rgba(99,102,241,0.2)",borderRadius:12,padding:16}}>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Monthly Total (PKR)</div>
+              <div style={{fontSize:22,fontWeight:700,color:"#a5b4fc"}}>₨{donTotalPKR.toLocaleString()}</div>
+            </div>
+            <div style={{background:"rgba(34,197,94,0.08)",border:"0.5px solid rgba(34,197,94,0.2)",borderRadius:12,padding:16}}>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Active Recipients</div>
+              <div style={{fontSize:22,fontWeight:700,color:"#86efac"}}>{donActive.length}</div>
+            </div>
+            <div style={{background:"rgba(245,158,11,0.08)",border:"0.5px solid rgba(245,158,11,0.2)",borderRadius:12,padding:16}}>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Total Recipients</div>
+              <div style={{fontSize:22,fontWeight:700,color:"#fcd34d"}}>{donations.length}</div>
+            </div>
+          </div>
+
+          {/* Add button */}
+          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+            <button onClick={()=>{setShowAddDon(v=>!v);setEditDonId(null);}} style={{background:"rgba(99,102,241,0.15)",border:"0.5px solid rgba(99,102,241,0.35)",borderRadius:8,padding:"6px 14px",color:"#a5b4fc",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+              {showAddDon?"✕ Cancel":"＋ Add Recipient"}
+            </button>
+          </div>
+
+          {/* Add Donation Form */}
+          {showAddDon&&(
+            <div style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.25)",borderRadius:12,padding:16,marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:500,marginBottom:12,color:"#a5b4fc"}}>New Donation Recipient</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+                {[["Name *","name","text"],["Address","address","text"],["Bank Name","bankName","text"],["Account No","accountNo","text"],["Account Title","accountTitle","text"],["Monthly Amount","monthlyAmount","number"]].map(([lbl,fld,type])=>(
+                  <div key={fld}><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>{lbl}</div>
+                    <input type={type} placeholder={lbl} value={newDon[fld]} onChange={e=>setNewDon({...newDon,[fld]:e.target.value})} style={inp}/>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Currency</div>
+                  <select value={newDon.currency} onChange={e=>setNewDon({...newDon,currency:e.target.value})} style={sel}><option>PKR</option><option>GBP</option></select>
+                </div>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Payment Method</div>
+                  <select value={newDon.paymentMethod} onChange={e=>setNewDon({...newDon,paymentMethod:e.target.value})} style={sel}><option>Bank Transfer</option><option>Cash</option><option>JazzCash</option><option>Easypaisa</option></select>
+                </div>
+                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Status</div>
+                  <select value={newDon.status} onChange={e=>setNewDon({...newDon,status:e.target.value})} style={sel}><option>Active</option><option>Paused</option><option>Stopped</option></select>
+                </div>
+                <button onClick={saveDonation} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12.5,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>Save</button>
+              </div>
+            </div>
+          )}
+
+          {/* Donations List */}
+          {donations.length===0?(
+            <div style={{background:"#13151f",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:12,padding:48,textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:13}}>No donation recipients added</div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {donations.map(d=>{
+                const statusColor=d.status==="Active"?"#86efac":d.status==="Paused"?"#fcd34d":"#f87171";
+                const statusBg=d.status==="Active"?"rgba(34,197,94,0.1)":d.status==="Paused"?"rgba(245,158,11,0.1)":"rgba(239,68,68,0.1)";
+                if (editDonId===d.id) return (
+                  <div key={d.id} style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.3)",borderRadius:12,padding:16}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+                      {[["Name *","name","name"],["Address","address","address"],["Bank Name","bank_name","bankName"],["Account No","account_no","accountNo"],["Account Title","account_title","accountTitle"],["Monthly Amount","monthly_amount","monthlyAmount"]].map(([lbl,fld])=>(
+                        <div key={fld}><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>{lbl}</div>
+                          <input type={fld==="monthly_amount"?"number":"text"} value={editDon[fld]||""} onChange={ev=>setEditDon({...editDon,[fld]:ev.target.value})} style={inp}/>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto auto",gap:8,alignItems:"flex-end"}}>
+                      <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Currency</div>
+                        <select value={editDon.currency||"PKR"} onChange={ev=>setEditDon({...editDon,currency:ev.target.value})} style={sel}><option>PKR</option><option>GBP</option></select>
+                      </div>
+                      <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Payment Method</div>
+                        <select value={editDon.payment_method||"Bank Transfer"} onChange={ev=>setEditDon({...editDon,payment_method:ev.target.value})} style={sel}><option>Bank Transfer</option><option>Cash</option><option>JazzCash</option><option>Easypaisa</option></select>
+                      </div>
+                      <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Status</div>
+                        <select value={editDon.status||"Active"} onChange={ev=>setEditDon({...editDon,status:ev.target.value})} style={sel}><option>Active</option><option>Paused</option><option>Stopped</option></select>
+                      </div>
+                      <button onClick={()=>updateDonation(d.id)} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:7,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Save</button>
+                      <button onClick={()=>setEditDonId(null)} style={{background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.4)",border:"none",borderRadius:7,padding:"8px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                    </div>
+                  </div>
+                );
+                return (
+                  <div key={d.id} style={{background:"#13151f",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff",flexShrink:0}}>{d.name[0].toUpperCase()}</div>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                        <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>{d.name}</span>
+                        <span style={{fontSize:10,padding:"2px 8px",borderRadius:5,background:statusBg,color:statusColor,fontWeight:500}}>{d.status}</span>
+                      </div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>
+                        {d.bank_name?`${d.bank_name} · ${d.account_no||""}${d.account_title?` · ${d.account_title}`:""}`:"No bank details"}
+                        {d.address?` · ${d.address}`:""}
+                      </div>
+                      {d.payment_method&&<div style={{fontSize:10.5,color:"rgba(255,255,255,0.28)",marginTop:2}}>{d.payment_method}</div>}
+                    </div>
+                    <div style={{textAlign:"right",minWidth:90}}>
+                      <div style={{fontSize:11,fontWeight:700,color:d.status==="Active"?"#a5b4fc":"rgba(255,255,255,0.3)"}}>
+                        {d.currency==="GBP"?"£":"₨"}{parseFloat(d.monthly_amount||0).toLocaleString()}
+                      </div>
+                      <div style={{fontSize:9.5,color:"rgba(255,255,255,0.28)",marginTop:1}}>per month</div>
+                    </div>
+                    <div style={{display:"flex",gap:5,flexShrink:0}}>
+                      <button onClick={()=>{setEditDonId(d.id);setEditDon({...d});setShowAddDon(false);}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"5px 11px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                      <button onClick={()=>deleteDonation(d.id)} style={{background:"rgba(239,68,68,0.1)",color:"#f87171",border:"none",borderRadius:6,padding:"5px 11px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Del</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"Inter,system-ui,sans-serif",background:"#0a0b11",color:"#fff",overflow:"hidden"}}>
       {Sidebar}
@@ -2510,6 +2825,7 @@ ${vaRows}
         {activeNav==="reports"&&Analytics}
         {activeNav==="clients"&&ClientsPanel}
         {activeNav==="employees"&&EmployeesPanel}
+        {activeNav==="finance"&&FinancePanel}
         {activeNav==="settings"&&SettingsPanel}
       </div>
     </div>
