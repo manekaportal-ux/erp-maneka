@@ -1,0 +1,40 @@
+name: Deploy ERP to Server
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: 2.24.130.53
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Copy frontend files
+            cp -r /root/erp-project/frontend/src/* /var/www/erp-frontend/src/
+            
+            # Copy backend file
+            cp /root/erp-project/backend/index.js /var/www/erp/index.js
+            
+            # Pull latest from GitHub
+            cd /root/erp-project && git pull origin main
+            
+            # Copy updated files to live directories
+            cp -r /root/erp-project/frontend/src/* /var/www/erp-frontend/src/
+            cp /root/erp-project/backend/index.js /var/www/erp/index.js
+            
+            # Build frontend
+            cd /var/www/erp-frontend && npm run build
+            
+            # Restart backend
+            pm2 restart maneka-erp
+            
+            echo "Deployment complete!"
