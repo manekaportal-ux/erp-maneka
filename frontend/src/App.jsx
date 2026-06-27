@@ -1422,6 +1422,132 @@ ${vaRows}
     w.document.close();
   }
 
+  function downloadSingleVAPDF(vaName, stores) {
+    const monthLabel = (() => {
+      const [yr, mo] = currentMonth.split("-");
+      return `${MONTHS[parseInt(mo,10)-1]} ${yr}`;
+    })();
+
+    const totalProfit = stores.reduce((s,a)=>s+(parseFloat(getEntry(a.id).totalProfit)||0),0);
+    const totalPen = stores.reduce((s,a)=>{const e=getEntry(a.id);return s+(parseFloat(e.hmrcFee)||0)+(parseFloat(e.counterfeit)||0)+(parseFloat(e.leavesPenalty)||0)+(parseFloat(e.feedbackDed)||0)+(parseFloat(e.lateArrival)||0)+(parseFloat(e.warningPenalty)||0)+(parseFloat(e.otherPenalty)||0);},0);
+    const totalVA = stores.reduce((s,a)=>{const e=getEntry(a.id);const p=parseFloat(e.totalProfit)||0;const pen=(parseFloat(e.hmrcFee)||0)+(parseFloat(e.counterfeit)||0)+(parseFloat(e.leavesPenalty)||0)+(parseFloat(e.feedbackDed)||0)+(parseFloat(e.lateArrival)||0)+(parseFloat(e.warningPenalty)||0)+(parseFloat(e.otherPenalty)||0);return s+(p*(a.vaPct/100)-pen);},0);
+    const depts = [...new Set(stores.map(a=>a.dept))];
+
+    const deptColors={OnBuy:"#f97316",eBay:"#f59e0b",Amazon:"#ef4444","TikTok Shop":"#8b5cf6"};
+
+    const storeRows = stores.map(a=>{
+      const e=getEntry(a.id);
+      const profit=parseFloat(e.totalProfit)||0;
+      const hmrc=parseFloat(e.hmrcFee)||0;
+      const cf=parseFloat(e.counterfeit)||0;
+      const lp=parseFloat(e.leavesPenalty)||0;
+      const fd=parseFloat(e.feedbackDed)||0;
+      const la=parseFloat(e.lateArrival)||0;
+      const wp=parseFloat(e.warningPenalty)||0;
+      const op=parseFloat(e.otherPenalty)||0;
+      const pen=hmrc+cf+lp+fd+la+wp+op;
+      const vaEarn=(profit*(a.vaPct/100))-pen;
+      const bank=a.bankName?`${a.bankName} · ${a.accountNo}${a.accountTitle?` · ${a.accountTitle}`:""}` :"—";
+      const dc=deptColors[a.dept]||"#6366f1";
+
+      const penDetails=[
+        hmrc>0?`HMRC £${hmrc.toFixed(2)}`:"",
+        cf>0?`Counterfeit £${cf.toFixed(2)}`:"",
+        lp>0?`Leaves £${lp.toFixed(2)}`:"",
+        fd>0?`Feedback £${fd.toFixed(2)}`:"",
+        la>0?`Late £${la.toFixed(2)}`:"",
+        wp>0?`Warning £${wp.toFixed(2)}`:"",
+        op>0?`Other £${op.toFixed(2)}`:"",
+      ].filter(Boolean).join(" · ")||"None";
+
+      return `<tr>
+        <td style="font-weight:600;color:#fff">${a.storeName}</td>
+        <td><span style="background:${dc}22;color:${dc};padding:2px 7px;border-radius:4px;font-size:10px;font-weight:500">${a.dept}</span></td>
+        <td style="color:#94a3b8">${a.clientPct}%</td>
+        <td style="color:#94a3b8">${a.agencyPct}%</td>
+        <td style="color:#94a3b8;font-weight:600">${a.vaPct}%</td>
+        <td style="color:#e2e8f0;font-weight:600">£${profit.toFixed(2)}</td>
+        <td style="color:#86efac;font-weight:700">£${vaEarn.toFixed(2)}</td>
+        <td style="color:#f87171">£${pen.toFixed(2)}<br><span style="font-size:9px;color:#94a3b8">${penDetails}</span></td>
+        <td style="color:#94a3b8;font-size:10px">${bank}</td>
+      </tr>`;
+    }).join("");
+
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${vaName} — ${monthLabel}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#0a0b11;color:#e2e8f0;padding:28px;font-size:12px}
+  .header{display:flex;align-items:center;gap:16px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.1)}
+  .avatar{width:52px;height:52px;border-radius:13px;background:linear-gradient(135deg,#f59e0b,#f97316);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0}
+  .title{font-size:22px;font-weight:700;color:#fff}
+  .subtitle{font-size:12px;color:#64748b;margin-top:3px}
+  .meta{margin-left:auto;text-align:right}
+  .meta-company{font-size:11px;color:#64748b}
+  .meta-date{font-size:10px;color:#475569;margin-top:2px}
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px}
+  .sum-box{border-radius:11px;padding:16px}
+  .sum-box.blue{background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3)}
+  .sum-box.green{background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.25)}
+  .sum-box.red{background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25)}
+  .sum-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+  .sum-box.blue .sum-label{color:#818cf8}
+  .sum-box.green .sum-label{color:#4ade80}
+  .sum-box.red .sum-label{color:#f87171}
+  .sum-val{font-size:22px;font-weight:700}
+  .sum-box.blue .sum-val{color:#a5b4fc}
+  .sum-box.green .sum-val{color:#86efac}
+  .sum-box.red .sum-val{color:#f87171}
+  .section-title{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;padding:8px 10px;font-size:9px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(0,0,0,0.3)}
+  td{padding:11px 10px;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:top}
+  .table-wrap{background:#13151f;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;margin-bottom:20px}
+  .footer{margin-top:20px;text-align:center;font-size:10px;color:#334155;border-top:1px solid rgba(255,255,255,0.06);padding-top:12px}
+  @media print{
+    body{background:#fff;color:#1e293b}
+    .header{border-color:rgba(0,0,0,0.1)!important}
+    .sum-box,.table-wrap{border-color:rgba(0,0,0,0.12)!important;background:rgba(0,0,0,0.03)!important}
+    .title{color:#111827!important}
+    .sum-val{color:#111827!important}
+    .sum-box.green .sum-val{color:#16a34a!important}
+    .sum-box.red .sum-val{color:#dc2626!important}
+    td,th{color:#374151!important}
+    .footer{border-color:rgba(0,0,0,0.1)!important;color:#9ca3af!important}
+  }
+</style></head><body>
+<div class="header">
+  <div class="avatar">${vaName[0].toUpperCase()}</div>
+  <div>
+    <div class="title">${vaName}</div>
+    <div class="subtitle">${stores.length} store${stores.length>1?"s":""} &nbsp;·&nbsp; ${depts.join(", ")} &nbsp;·&nbsp; ${monthLabel}</div>
+  </div>
+  <div class="meta">
+    <div class="meta-company">E-Commerce Maneka</div>
+    <div class="meta-date">Generated ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</div>
+  </div>
+</div>
+<div class="summary">
+  <div class="sum-box blue"><div class="sum-label">Total Store Profit</div><div class="sum-val">£${totalProfit.toFixed(2)}</div></div>
+  <div class="sum-box green"><div class="sum-label">VA Net Earning</div><div class="sum-val">£${totalVA.toFixed(2)}</div></div>
+  <div class="sum-box red"><div class="sum-label">Total Penalties</div><div class="sum-val">£${totalPen.toFixed(2)}</div></div>
+</div>
+<div class="section-title">Assigned Stores — ${monthLabel}</div>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Store</th><th>Dept</th><th>Client%</th><th>Agency%</th><th>VA%</th><th>Profit</th><th>VA Earning</th><th>Penalties</th><th>Bank</th></tr></thead>
+    <tbody>${storeRows}</tbody>
+  </table>
+</div>
+<div class="footer">E-Commerce Maneka ERP &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; ${vaName} &nbsp;·&nbsp; ${monthLabel}</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+
+    const w=window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+  }
+
   // ── EMPLOYEES PANEL ──
   const EmployeesPanel = (
     <div style={{flex:1,overflowY:"auto",padding:"16px 26px"}}>
@@ -1706,7 +1832,13 @@ ${vaRows}
                     <div style={{borderTop:"0.5px solid rgba(255,255,255,0.07)",padding:16}}>
                       {/* Stores table */}
                       <div style={{marginBottom:16}}>
-                        <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Assigned Stores</div>
+                        <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
+                          <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em"}}>Assigned Stores</div>
+                          <button onClick={e=>{e.stopPropagation();downloadSingleVAPDF(vaName,stores);}} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,background:"rgba(99,102,241,0.12)",border:"0.5px solid rgba(99,102,241,0.3)",borderRadius:7,padding:"5px 11px",color:"#a5b4fc",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v8M5 7l3 3 3-3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+                            Download PDF
+                          </button>
+                        </div>
                         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
                           <thead><tr style={{borderBottom:"0.5px solid rgba(255,255,255,0.06)"}}>
                             {["Store","Dept","Client%","Agency%","VA%","This Month Profit","VA Earning","Penalties","Bank"].map(h=>(
