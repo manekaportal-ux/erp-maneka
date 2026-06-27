@@ -609,11 +609,12 @@ export default function App() {
         ]:[
           {id:"monthly",icon:"📅",label:"Monthly Sheet"},
           {id:"clients",icon:"👤",label:"Clients"},
+          {id:"employees",icon:"👥",label:"Employees"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]).map(nav=>{
           const isActive=activeNav===nav.id;
           return (
-            <div key={nav.id} onClick={()=>{setActiveNav(nav.id);setSelectedClientId(null);}}
+            <div key={nav.id} onClick={()=>{setActiveNav(nav.id);setSelectedClientId(null);if(nav.id==="employees"&&role==="admin")setEmpTab("va");}}
               style={{display:"flex",alignItems:"center",gap:9,padding:"8px 16px",fontSize:12.5,cursor:"pointer",borderLeft:isActive?"2px solid #6366f1":"2px solid transparent",background:isActive?"rgba(99,102,241,0.1)":"transparent",color:isActive?"#fff":"rgba(255,255,255,0.4)",fontWeight:isActive?500:400,transition:"all 0.14s"}}>
               <span style={{fontSize:14}}>{nav.icon}</span>{nav.label}
             </div>
@@ -1552,7 +1553,7 @@ ${vaRows}
   const EmployeesPanel = (
     <div style={{flex:1,overflowY:"auto",padding:"16px 26px"}}>
       <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"0.5px solid rgba(255,255,255,0.06)"}}>
-        {[["list","👔 Staff Employees"],["va","🛒 VA List"],["add","➕ Add Employee"],["trash","🗑️ Trash"]].map(([id,lbl])=>(
+        {(role==="admin"?[["va","🛒 VA List"]]:[["list","👔 Staff Employees"],["va","🛒 VA List"],["add","➕ Add Employee"],["trash","🗑️ Trash"]]).map(([id,lbl])=>(
           <button key={id} onClick={()=>setEmpTab(id)} style={{padding:"8px 18px",fontSize:12.5,cursor:"pointer",color:empTab===id?"#fff":"rgba(255,255,255,0.35)",borderBottom:empTab===id?"2px solid #6366f1":"2px solid transparent",background:"none",border:"none",borderBottom:empTab===id?"2px solid #6366f1":"2px solid transparent",fontFamily:"inherit",fontWeight:empTab===id?500:400,marginBottom:-0.5}}>{lbl}</button>
         ))}
       </div>
