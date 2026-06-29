@@ -372,13 +372,15 @@ export default function App() {
 
   const saveEntryToDB = useCallback(async (id, data) => {
     const key = `${id}_${currentMonth}`;
-    setEntries(prev => {
-      const updated = {...prev,[key]:{...(prev[key]||{}),...data,createdBy:currentUser}};
-      fetch(`${API}/api/entries`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key,data:updated[key]})}).catch(()=>{});
-      return updated;
-    });
-    setExpandedRow(null);
-  }, [currentMonth, currentUser]);
+    const merged = {...(entries[key]||{}),...data,createdBy:currentUser};
+    try {
+      const r = await fetch(`${API}/api/entries`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key,data:merged})});
+      const d = await r.json();
+      if (!r.ok||d.error) { alert(`Save failed: ${d.error||r.status}`); return; }
+      setEntries(prev=>({...prev,[key]:merged}));
+      setExpandedRow(null);
+    } catch(e) { alert("Save failed — check your connection and try again"); }
+  }, [currentMonth, currentUser, entries]);
 
   function calcRow(acc, month) {
     const e = getEntry(acc.id, month);
