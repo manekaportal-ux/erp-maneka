@@ -34,7 +34,10 @@ jobs:
             # Build frontend
             cd /var/www/erp-frontend && npm run build
             
+            # Run DB migrations as postgres superuser (maneka_user can't ALTER tables it doesn't own)
+            sudo -u postgres psql -d maneka_erp -c "ALTER TABLE entries ADD COLUMN IF NOT EXISTS created_by TEXT DEFAULT ''; ALTER TABLE expenses ADD COLUMN IF NOT EXISTS created_by TEXT DEFAULT '';"
+
             # Restart backend
             pm2 restart maneka-erp
-            
+
             echo "Deployment complete!"
