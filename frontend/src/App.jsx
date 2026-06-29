@@ -103,9 +103,12 @@ function ExpandedRow({ a, entryData, onSave, onCancel }) {
         <input value={local.notes} onChange={e=>setLocal(p=>({...p,notes:e.target.value}))} placeholder="Add note..."
           style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
       </div>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-        <button onClick={onCancel} style={{background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",borderRadius:8,padding:"9px 20px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-        <button onClick={handleSave} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 28px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{saving?"Saving...":"Save ✓"}</button>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+        {entryData.createdBy?<div style={{fontSize:10.5,color:"rgba(255,255,255,0.25)"}}>Last saved by: <span style={{color:"#a5b4fc",fontWeight:500}}>{entryData.createdBy}</span></div>:<div/>}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={onCancel} style={{background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",borderRadius:8,padding:"9px 20px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          <button onClick={handleSave} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 28px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{saving?"Saving...":"Save ✓"}</button>
+        </div>
       </div>
     </div>
   );
@@ -266,6 +269,7 @@ function UserManagement({ role, API }) {
 export default function App() {
   const [role, setRole] = useState(null);
   const [username, setUsername] = useState("");
+  const [currentUser, setCurrentUser] = useState("");
   const [password, setPassword] = useState("");
   const [loginErr, setLoginErr] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
@@ -322,7 +326,7 @@ export default function App() {
   const [expFilter, setExpFilter] = useState("All");
   const [showAddExp, setShowAddExp] = useState(false);
   const [editExpId, setEditExpId] = useState(null);
-  const [newExp, setNewExp] = useState({date:new Date().toISOString().split("T")[0],category:"Other",description:"",amountGbp:"",amountPkr:"",notes:""});
+  const [newExp, setNewExp] = useState({date:new Date().toISOString().split("T")[0],category:"Other",description:"",amountPkr:"",notes:""});
   const [editExp, setEditExp] = useState({});
   const [showAddDon, setShowAddDon] = useState(false);
   const [editDonId, setEditDonId] = useState(null);
@@ -369,12 +373,12 @@ export default function App() {
   const saveEntryToDB = useCallback(async (id, data) => {
     const key = `${id}_${currentMonth}`;
     setEntries(prev => {
-      const updated = {...prev,[key]:{...(prev[key]||{}),...data}};
+      const updated = {...prev,[key]:{...(prev[key]||{}),...data,createdBy:currentUser}};
       fetch(`${API}/api/entries`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key,data:updated[key]})}).catch(()=>{});
       return updated;
     });
     setExpandedRow(null);
-  }, [currentMonth]);
+  }, [currentMonth, currentUser]);
 
   function calcRow(acc, month) {
     const e = getEntry(acc.id, month);
@@ -530,7 +534,7 @@ export default function App() {
       const r = await fetch(`${API}/api/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:username.trim(),password})});
       const d = await r.json();
       if (d.success) {
-        setRole(d.role); setUsername(""); setPassword(""); setLoginErr("");
+        setCurrentUser(username.trim()); setRole(d.role); setUsername(""); setPassword(""); setLoginErr("");
         setActiveNav(d.role==="ceo"?"dashboard":"monthly");
       } else { setLoginErr(d.message||"Invalid username or password"); }
     } catch(e) { setLoginErr("Connection error — try again"); }
@@ -2079,7 +2083,7 @@ ${vaRows}
         email:editClient.email||"",
         phone:editClient.phone||"",
         address:editClient.address||"",
-        joinDate:editClient.join_date?editClient.join_date.split("T")[0]:new Date().toISOString().split("T")[0],
+        joinDate:editClient.join_date?(editClient.join_date.includes("T")?editClient.join_date.split("T")[0]:editClient.join_date):new Date().toISOString().split("T")[0],
         status:editClient.status||"Active",
         notes:editClient.notes||""
       })});
@@ -2265,6 +2269,9 @@ ${vaRows}
                             <select value={editClient.status||"Active"} onChange={e=>setEditClient({...editClient,status:e.target.value})} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid #6366f1",borderRadius:7,padding:"8px 10px",color:"#fff",fontSize:12.5,fontFamily:"inherit",outline:"none"}}>
                               <option value="Active">Active</option><option value="Hold">Hold</option><option value="Stopped">Stopped</option>
                             </select>
+                          </div>
+                          <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Join Date</div>
+                            <input type="date" value={editClient.join_date?editClient.join_date.split("T")[0]:""} onChange={e=>setEditClient({...editClient,join_date:e.target.value})} style={{width:"100%",background:"rgba(255,255,255,0.08)",border:"0.5px solid #6366f1",borderRadius:7,padding:"8px 10px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                           </div>
                         </div>
                         <div style={{marginBottom:14}}><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Notes</div><input value={editClient.notes||""} onChange={e=>setEditClient({...editClient,notes:e.target.value})} style={{width:"100%",background:"rgba(255,255,255,0.08)",border:"0.5px solid #6366f1",borderRadius:7,padding:"8px 10px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
@@ -2456,24 +2463,24 @@ ${vaRows}
   const thisYearStr = `${now.getFullYear()}`;
 
   const filteredExp = expenses.filter(e=> expFilter==="All"||e.category===expFilter);
-  const expThisMonth = expenses.filter(e=>e.date&&e.date.startsWith(thisMonthStr)).reduce((s,e)=>s+(parseFloat(e.amount_gbp)||0),0);
-  const expThisYear  = expenses.filter(e=>e.date&&e.date.startsWith(thisYearStr)).reduce((s,e)=>s+(parseFloat(e.amount_gbp)||0),0);
-  const expAllTime   = expenses.reduce((s,e)=>s+(parseFloat(e.amount_gbp)||0),0);
+  const expThisMonth = expenses.filter(e=>e.date&&e.date.startsWith(thisMonthStr)).reduce((s,e)=>s+(parseFloat(e.amount_pkr)||0),0);
+  const expThisYear  = expenses.filter(e=>e.date&&e.date.startsWith(thisYearStr)).reduce((s,e)=>s+(parseFloat(e.amount_pkr)||0),0);
+  const expAllTime   = expenses.reduce((s,e)=>s+(parseFloat(e.amount_pkr)||0),0);
   const donActive    = donations.filter(d=>d.status==="Active");
   const donTotalPKR  = donActive.reduce((s,d)=>s+(parseFloat(d.monthly_amount)||0),0);
 
   async function saveExpense() {
     if (!newExp.description) return alert("Description required");
     try {
-      const r = await fetch(`${API}/api/expenses`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:newExp.date,category:newExp.category,description:newExp.description,amountGbp:parseFloat(newExp.amountGbp)||0,amountPkr:parseFloat(newExp.amountPkr)||0,currency:"GBP",notes:newExp.notes})});
+      const r = await fetch(`${API}/api/expenses`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:newExp.date,category:newExp.category,description:newExp.description,amountGbp:0,amountPkr:parseFloat(newExp.amountPkr)||0,currency:"PKR",notes:newExp.notes,createdBy:currentUser})});
       const d = await r.json();
-      if (d.id) { setExpenses(prev=>[d,...prev]); setShowAddExp(false); setNewExp({date:new Date().toISOString().split("T")[0],category:"Other",description:"",amountGbp:"",amountPkr:"",notes:""}); }
+      if (d.id) { setExpenses(prev=>[d,...prev]); setShowAddExp(false); setNewExp({date:new Date().toISOString().split("T")[0],category:"Other",description:"",amountPkr:"",notes:""}); }
     } catch(e) { alert("Error saving expense"); }
   }
 
   async function updateExpense(id) {
     try {
-      await fetch(`${API}/api/expenses/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:editExp.date,category:editExp.category,description:editExp.description,amountGbp:parseFloat(editExp.amount_gbp)||0,amountPkr:parseFloat(editExp.amount_pkr)||0,currency:"GBP",notes:editExp.notes||""})});
+      await fetch(`${API}/api/expenses/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:editExp.date,category:editExp.category,description:editExp.description,amountGbp:0,amountPkr:parseFloat(editExp.amount_pkr)||0,currency:"PKR",notes:editExp.notes||""})});
       setExpenses(prev=>prev.map(e=>e.id===id?{...e,...editExp,amount_gbp:parseFloat(editExp.amount_gbp)||0,amount_pkr:parseFloat(editExp.amount_pkr)||0}:e));
       setEditExpId(null);
     } catch(e) { alert("Error updating"); }
@@ -2526,9 +2533,9 @@ ${vaRows}
           {/* Summary Cards */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
             {[
-              {label:"This Month",val:`£${expThisMonth.toFixed(2)}`,color:"#6366f1",bg:"rgba(99,102,241,0.1)",border:"rgba(99,102,241,0.2)"},
-              {label:"This Year",val:`£${expThisYear.toFixed(2)}`,color:"#f59e0b",bg:"rgba(245,158,11,0.1)",border:"rgba(245,158,11,0.2)"},
-              {label:"All Time",val:`£${expAllTime.toFixed(2)}`,color:"#ef4444",bg:"rgba(239,68,68,0.1)",border:"rgba(239,68,68,0.2)"},
+              {label:"This Month",val:`₨${Math.round(expThisMonth).toLocaleString()}`,color:"#6366f1",bg:"rgba(99,102,241,0.1)",border:"rgba(99,102,241,0.2)"},
+              {label:"This Year",val:`₨${Math.round(expThisYear).toLocaleString()}`,color:"#f59e0b",bg:"rgba(245,158,11,0.1)",border:"rgba(245,158,11,0.2)"},
+              {label:"All Time",val:`₨${Math.round(expAllTime).toLocaleString()}`,color:"#ef4444",bg:"rgba(239,68,68,0.1)",border:"rgba(239,68,68,0.2)"},
             ].map(c=>(
               <div key={c.label} style={{background:c.bg,border:`0.5px solid ${c.border}`,borderRadius:12,padding:16}}>
                 <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{c.label}</div>
@@ -2551,7 +2558,7 @@ ${vaRows}
           {showAddExp&&(
             <div style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.25)",borderRadius:12,padding:16,marginBottom:14}}>
               <div style={{fontSize:12,fontWeight:500,marginBottom:12,color:"#a5b4fc"}}>New Expense</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 1fr",gap:8,marginBottom:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr",gap:8,marginBottom:10}}>
                 <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Date</div><input type="date" value={newExp.date} onChange={e=>setNewExp({...newExp,date:e.target.value})} style={inp}/></div>
                 <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Category</div>
                   <select value={newExp.category} onChange={e=>setNewExp({...newExp,category:e.target.value})} style={sel}>
@@ -2559,7 +2566,6 @@ ${vaRows}
                   </select>
                 </div>
                 <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Description *</div><input placeholder="Description" value={newExp.description} onChange={e=>setNewExp({...newExp,description:e.target.value})} style={inp}/></div>
-                <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Amount GBP</div><input type="number" placeholder="0.00" value={newExp.amountGbp} onChange={e=>setNewExp({...newExp,amountGbp:e.target.value})} style={inp}/></div>
                 <div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginBottom:3}}>Amount PKR</div><input type="number" placeholder="0" value={newExp.amountPkr} onChange={e=>setNewExp({...newExp,amountPkr:e.target.value})} style={inp}/></div>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
@@ -2576,7 +2582,7 @@ ${vaRows}
             ):(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
                 <thead><tr style={{borderBottom:"0.5px solid rgba(255,255,255,0.07)"}}>
-                  {["Date","Category","Description","GBP","PKR","Notes",""].map(h=>(
+                  {["Date","Category","Description","PKR","Notes","Added By",""].map(h=>(
                     <th key={h} style={{textAlign:"left",padding:"10px 12px",fontSize:10,fontWeight:500,color:"rgba(255,255,255,0.28)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>
                   ))}
                 </tr></thead>
@@ -2592,9 +2598,9 @@ ${vaRows}
                           </select>
                         </td>
                         <td style={{padding:"8px 12px"}}><input value={editExp.description||""} onChange={ev=>setEditExp({...editExp,description:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12}}/></td>
-                        <td style={{padding:"8px 12px"}}><input type="number" value={editExp.amount_gbp||""} onChange={ev=>setEditExp({...editExp,amount_gbp:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12,width:80}}/></td>
-                        <td style={{padding:"8px 12px"}}><input type="number" value={editExp.amount_pkr||""} onChange={ev=>setEditExp({...editExp,amount_pkr:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12,width:90}}/></td>
+                        <td style={{padding:"8px 12px"}}><input type="number" value={editExp.amount_pkr||""} onChange={ev=>setEditExp({...editExp,amount_pkr:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12,width:110}}/></td>
                         <td style={{padding:"8px 12px"}}><input value={editExp.notes||""} onChange={ev=>setEditExp({...editExp,notes:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12}}/></td>
+                        <td style={{padding:"8px 12px",color:"rgba(255,255,255,0.3)",fontSize:11}}>{editExp.created_by||"—"}</td>
                         <td style={{padding:"8px 12px"}}>
                           <div style={{display:"flex",gap:5}}>
                             <button onClick={()=>updateExpense(e.id)} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Save</button>
@@ -2608,9 +2614,9 @@ ${vaRows}
                         <td style={{padding:"10px 12px",color:"rgba(255,255,255,0.5)",fontSize:11.5}}>{e.date?new Date(e.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—"}</td>
                         <td style={{padding:"10px 12px"}}><span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:`${cc}18`,color:cc,fontWeight:500}}>{e.category}</span></td>
                         <td style={{padding:"10px 12px",color:"#fff",fontWeight:500}}>{e.description}</td>
-                        <td style={{padding:"10px 12px",color:"#86efac",fontWeight:600}}>£{parseFloat(e.amount_gbp||0).toFixed(2)}</td>
-                        <td style={{padding:"10px 12px",color:"rgba(255,255,255,0.5)"}}>{parseFloat(e.amount_pkr||0)>0?`₨${parseFloat(e.amount_pkr).toLocaleString()}`:"—"}</td>
+                        <td style={{padding:"10px 12px",color:"#86efac",fontWeight:600}}>{parseFloat(e.amount_pkr||0)>0?`₨${Math.round(parseFloat(e.amount_pkr)).toLocaleString()}`:"—"}</td>
                         <td style={{padding:"10px 12px",color:"rgba(255,255,255,0.35)",fontSize:11.5}}>{e.notes||"—"}</td>
+                        <td style={{padding:"10px 12px",color:"#a5b4fc",fontSize:11.5}}>{e.created_by||"—"}</td>
                         <td style={{padding:"10px 12px"}}>
                           <div style={{display:"flex",gap:5}}>
                             <button onClick={()=>{setEditExpId(e.id);setEditExp({...e});setShowAddExp(false);}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
