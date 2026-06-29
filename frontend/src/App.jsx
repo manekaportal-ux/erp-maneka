@@ -26,7 +26,7 @@ function getCurrentMonth() {
 }
 
 // ── EXPANDED ROW COMPONENT ──
-function ExpandedRow({ a, entryData, onSave, onCancel }) {
+function ExpandedRow({ a, entryData, onSave, onCancel, isCeo }) {
   const [local, setLocal] = useState({
     totalProfit: entryData.totalProfit||"",
     hmrcFee: entryData.hmrcFee||"",
@@ -104,7 +104,7 @@ function ExpandedRow({ a, entryData, onSave, onCancel }) {
           style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-        {entryData.createdBy?<div style={{fontSize:10.5,color:"rgba(255,255,255,0.25)"}}>Last saved by: <span style={{color:"#a5b4fc",fontWeight:500}}>{entryData.createdBy}</span></div>:<div/>}
+        {isCeo&&entryData.createdBy?<div style={{fontSize:10.5,color:"rgba(255,255,255,0.25)"}}>Last saved by: <span style={{color:"#a5b4fc",fontWeight:500}}>{entryData.createdBy}</span></div>:<div/>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={onCancel} style={{background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",borderRadius:8,padding:"9px 20px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
           <button onClick={handleSave} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 28px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{saving?"Saving...":"Save ✓"}</button>
@@ -852,7 +852,7 @@ export default function App() {
                 {e.paymentStatus&&<span style={{fontSize:10,padding:"3px 9px",borderRadius:5,background:e.paymentStatus==="Paid"?"rgba(34,197,94,0.15)":e.paymentStatus==="Overdue"?"rgba(239,68,68,0.15)":"rgba(245,158,11,0.15)",color:e.paymentStatus==="Paid"?"#86efac":e.paymentStatus==="Overdue"?"#f87171":"#fcd34d",flexShrink:0}}>{e.paymentStatus}</span>}
                 <span style={{fontSize:16,color:"rgba(255,255,255,0.3)",display:"inline-block",transform:isOpen?"rotate(90deg)":"rotate(0deg)",transition:"transform 0.2s",flexShrink:0}}>›</span>
               </div>
-              {isOpen&&<ExpandedRow key={`${a.id}_${currentMonth}`} a={a} entryData={getEntry(a.id)} onSave={saveEntryToDB} onCancel={()=>setExpandedRow(null)}/>}
+              {isOpen&&<ExpandedRow key={`${a.id}_${currentMonth}`} a={a} entryData={getEntry(a.id)} onSave={saveEntryToDB} onCancel={()=>setExpandedRow(null)} isCeo={role==="ceo"}/>}
             </div>
           );
         })}
@@ -2582,7 +2582,7 @@ ${vaRows}
             ):(
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
                 <thead><tr style={{borderBottom:"0.5px solid rgba(255,255,255,0.07)"}}>
-                  {["Date","Category","Description","PKR","Notes","Added By",""].map(h=>(
+                  {["Date","Category","Description","PKR","Notes",...(role==="ceo"?["Added By"]:[]),""].map(h=>(
                     <th key={h} style={{textAlign:"left",padding:"10px 12px",fontSize:10,fontWeight:500,color:"rgba(255,255,255,0.28)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>
                   ))}
                 </tr></thead>
@@ -2600,7 +2600,7 @@ ${vaRows}
                         <td style={{padding:"8px 12px"}}><input value={editExp.description||""} onChange={ev=>setEditExp({...editExp,description:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12}}/></td>
                         <td style={{padding:"8px 12px"}}><input type="number" value={editExp.amount_pkr||""} onChange={ev=>setEditExp({...editExp,amount_pkr:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12,width:110}}/></td>
                         <td style={{padding:"8px 12px"}}><input value={editExp.notes||""} onChange={ev=>setEditExp({...editExp,notes:ev.target.value})} style={{...inp,padding:"5px 8px",fontSize:12}}/></td>
-                        <td style={{padding:"8px 12px",color:"rgba(255,255,255,0.3)",fontSize:11}}>{editExp.created_by||"—"}</td>
+                        {role==="ceo"&&<td style={{padding:"8px 12px",color:"rgba(255,255,255,0.3)",fontSize:11}}>{editExp.created_by||"—"}</td>}
                         <td style={{padding:"8px 12px"}}>
                           <div style={{display:"flex",gap:5}}>
                             <button onClick={()=>updateExpense(e.id)} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Save</button>
@@ -2616,7 +2616,7 @@ ${vaRows}
                         <td style={{padding:"10px 12px",color:"#fff",fontWeight:500}}>{e.description}</td>
                         <td style={{padding:"10px 12px",color:"#86efac",fontWeight:600}}>{parseFloat(e.amount_pkr||0)>0?`₨${Math.round(parseFloat(e.amount_pkr)).toLocaleString()}`:"—"}</td>
                         <td style={{padding:"10px 12px",color:"rgba(255,255,255,0.35)",fontSize:11.5}}>{e.notes||"—"}</td>
-                        <td style={{padding:"10px 12px",color:"#a5b4fc",fontSize:11.5}}>{e.created_by||"—"}</td>
+                        {role==="ceo"&&<td style={{padding:"10px 12px",color:"#a5b4fc",fontSize:11.5}}>{e.created_by||"—"}</td>}
                         <td style={{padding:"10px 12px"}}>
                           <div style={{display:"flex",gap:5}}>
                             <button onClick={()=>{setEditExpId(e.id);setEditExp({...e});setShowAddExp(false);}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
