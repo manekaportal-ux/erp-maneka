@@ -771,6 +771,7 @@ export default function App() {
           {id:"clients",icon:"👤",label:"Clients"},
           {id:"employees",icon:"👥",label:"Employees"},
           {id:"finance",icon:"💰",label:"Finance"},
+          {id:"tasks",icon:"✅",label:"Tasks"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]).map(nav=>{
           const isActive=activeNav===nav.id;
