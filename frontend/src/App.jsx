@@ -337,7 +337,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [taskFilter, setTaskFilter] = useState("All");
   const [showAddTask, setShowAddTask] = useState(false);
-  const [newTask, setNewTask] = useState({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:"OnBuy",notes:""});
+  const [newTask, setNewTask] = useState({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:"OnBuy",assigned_to_manager:"",notes:""});
   const [editTaskId, setEditTaskId] = useState(null);
   const [editTask, setEditTask] = useState({});
   const [managers, setManagers] = useState([]);
@@ -384,9 +384,11 @@ export default function App() {
     try { const r=await fetch(`${API}/api/activity-log`); const d=await r.json(); if(Array.isArray(d)) setActivityLog(d); } catch(e) {}
   }
 
-  async function fetchTasks(dept) {
+  async function fetchTasks(dept, manager) {
     try {
-      const url = dept&&dept!=="All" ? `${API}/api/tasks?dept=${encodeURIComponent(dept)}` : `${API}/api/tasks`;
+      let url = `${API}/api/tasks`;
+      if(manager) url+=`?manager=${encodeURIComponent(manager)}`;
+      else if(dept&&dept!=="All") url+=`?dept=${encodeURIComponent(dept)}`;
       const r = await fetch(url); const d = await r.json(); if(Array.isArray(d)) setTasks(d);
     } catch(e) {}
   }
@@ -397,8 +399,8 @@ export default function App() {
 
   useEffect(()=>{ if(activeNav==="history"&&role==="ceo") fetchActivityLog(); },[activeNav]);
   useEffect(()=>{ if(activeNav==="tasks"&&(role==="ceo"||role==="admin")) fetchTasks("All"); },[activeNav]);
-  useEffect(()=>{ if(activeNav==="tasks"&&role==="ceo") fetchManagers(); },[activeNav]);
-  useEffect(()=>{ if(role==="manager"&&managerDept) fetchTasks(managerDept); },[role,managerDept]);
+  useEffect(()=>{ if(activeNav==="tasks"&&(role==="ceo"||role==="admin")) fetchManagers(); },[activeNav]);
+  useEffect(()=>{ if(role==="manager"&&managerDept&&currentUser) fetchTasks(managerDept,currentUser); },[role,managerDept,currentUser]);
   useEffect(()=>{ if(settingsTab==="managers"&&role==="ceo") fetchManagers(); },[settingsTab]);
 
   function entryKey(id, month) { return `${id}_${month||currentMonth}`; }
@@ -3037,15 +3039,16 @@ ${vaRows}
       {showAddTask&&(
         <div style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.3)",borderRadius:12,padding:20,marginBottom:16}}>
           <div style={{fontSize:13,fontWeight:600,color:"#a5b4fc",marginBottom:14}}>New Task</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
             <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Title *</div><input value={newTask.title} onChange={e=>setNewTask(p=>({...p,title:e.target.value}))} placeholder="Task title..." style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
-            <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Department</div><select value={newTask.assigned_to_dept} onChange={e=>setNewTask(p=>({...p,assigned_to_dept:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+            <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Department</div><select value={newTask.assigned_to_dept} onChange={e=>setNewTask(p=>({...p,assigned_to_dept:e.target.value,assigned_to_manager:""}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+            <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Assign To</div><select value={newTask.assigned_to_manager} onChange={e=>setNewTask(p=>({...p,assigned_to_manager:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}><option value="">All Managers</option>{managers.filter(m=>m.department===newTask.assigned_to_dept).map(m=><option key={m.id} value={m.username}>{m.name}</option>)}</select></div>
             <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Priority</div><select value={newTask.priority} onChange={e=>setNewTask(p=>({...p,priority:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["Low","Medium","High","Urgent"].map(p=><option key={p} value={p}>{p}</option>)}</select></div>
             <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Due Date</div><input type="date" value={newTask.due_date} onChange={e=>setNewTask(p=>({...p,due_date:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",colorScheme:"dark"}}/></div>
           </div>
           <div style={{marginBottom:10}}><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Description</div><textarea value={newTask.description} onChange={e=>setNewTask(p=>({...p,description:e.target.value}))} placeholder="Task description..." rows={2} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical"}}/></div>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={async()=>{if(!newTask.title.trim())return alert("Title required!");try{const r=await fetch(`${API}/api/tasks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...newTask,assigned_by:currentUser})});const d=await r.json();if(d.id){setTasks(p=>[d,...p]);setNewTask({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:newTask.assigned_to_dept,notes:""});setShowAddTask(false);}}catch(e){}}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Create Task</button>
+            <button onClick={async()=>{if(!newTask.title.trim())return alert("Title required!");try{const r=await fetch(`${API}/api/tasks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...newTask,assigned_by:currentUser})});const d=await r.json();if(d.id){setTasks(p=>[d,...p]);setNewTask({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:newTask.assigned_to_dept,assigned_to_manager:"",notes:""});setShowAddTask(false);}}catch(e){}}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Create Task</button>
             <button onClick={()=>setShowAddTask(false)} style={{background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"9px 16px",color:"rgba(255,255,255,0.5)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
           </div>
         </div>
@@ -3054,7 +3057,7 @@ ${vaRows}
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
           <thead>
             <tr style={{borderBottom:"0.5px solid rgba(255,255,255,0.07)"}}>
-              {["Title","Department","Priority","Status","Due Date","Assigned By","Actions"].map(h=>(
+              {["Title","Department","Assigned To","Priority","Status","Due Date","Assigned By","Actions"].map(h=>(
                 <th key={h} style={{padding:"11px 14px",textAlign:"left",fontSize:10.5,color:"rgba(255,255,255,0.3)",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>
               ))}
             </tr>
@@ -3066,10 +3069,11 @@ ${vaRows}
               return (
                 <tr key={t.id} style={{borderBottom:"0.5px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
                   {isEd?(
-                    <td colSpan={7} style={{padding:"14px 16px",background:"rgba(99,102,241,0.04)"}}>
-                      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:8}}>
+                    <td colSpan={8} style={{padding:"14px 16px",background:"rgba(99,102,241,0.04)"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:8}}>
                         <input value={editTask.title||""} onChange={e=>setEditTask(p=>({...p,title:e.target.value}))} style={{background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
-                        <select value={editTask.assigned_to_dept||"OnBuy"} onChange={e=>setEditTask(p=>({...p,assigned_to_dept:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select>
+                        <select value={editTask.assigned_to_dept||"OnBuy"} onChange={e=>setEditTask(p=>({...p,assigned_to_dept:e.target.value,assigned_to_manager:""}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select>
+                        <select value={editTask.assigned_to_manager||""} onChange={e=>setEditTask(p=>({...p,assigned_to_manager:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}><option value="">All Managers</option>{managers.filter(m=>m.department===(editTask.assigned_to_dept||"OnBuy")).map(m=><option key={m.id} value={m.username}>{m.name}</option>)}</select>
                         <select value={editTask.priority||"Medium"} onChange={e=>setEditTask(p=>({...p,priority:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["Low","Medium","High","Urgent"].map(p=><option key={p} value={p}>{p}</option>)}</select>
                         <select value={editTask.status||"Pending"} onChange={e=>setEditTask(p=>({...p,status:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["Pending","In Progress","Completed"].map(s=><option key={s} value={s}>{s}</option>)}</select>
                         <input type="date" value={editTask.due_date||""} onChange={e=>setEditTask(p=>({...p,due_date:e.target.value}))} style={{background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,outline:"none",fontFamily:"inherit",colorScheme:"dark"}}/>
@@ -3084,13 +3088,14 @@ ${vaRows}
                     <>
                       <td style={{padding:"11px 14px"}}><div style={{fontSize:13,fontWeight:500}}>{t.title}</div>{t.description&&<div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2,maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.description}</div>}</td>
                       <td style={{padding:"11px 14px"}}><span style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:`${dc}20`,color:dc,fontWeight:600}}>{t.assigned_to_dept}</span></td>
+                      <td style={{padding:"11px 14px",fontSize:12,color:"rgba(255,255,255,0.5)"}}>{t.assigned_to_manager?managers.find(m=>m.username===t.assigned_to_manager)?.name||t.assigned_to_manager:<span style={{color:"rgba(255,255,255,0.2)"}}>All</span>}</td>
                       <td style={{padding:"11px 14px"}}><span style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:`${pc}20`,color:pc,fontWeight:600}}>{t.priority}</span></td>
                       <td style={{padding:"11px 14px"}}><span style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:`${sc}18`,color:sc,fontWeight:600}}>{st}</span></td>
                       <td style={{padding:"11px 14px",fontSize:12,color:st==="Overdue"?"#f87171":"rgba(255,255,255,0.5)"}}>{t.due_date?new Date(t.due_date+"T00:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—"}</td>
                       <td style={{padding:"11px 14px",fontSize:12,color:"rgba(255,255,255,0.4)"}}>{t.assigned_by||"—"}</td>
                       <td style={{padding:"11px 14px"}}>
                         <div style={{display:"flex",gap:6}}>
-                          <button onClick={()=>{setEditTaskId(t.id);setEditTask({title:t.title,description:t.description||"",assigned_to_dept:t.assigned_to_dept,priority:t.priority,status:t.status,due_date:t.due_date?t.due_date.split("T")[0]:"",notes:t.notes||"",completed_at:t.completed_at});}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                          <button onClick={()=>{setEditTaskId(t.id);setEditTask({title:t.title,description:t.description||"",assigned_to_dept:t.assigned_to_dept,assigned_to_manager:t.assigned_to_manager||"",priority:t.priority,status:t.status,due_date:t.due_date?t.due_date.split("T")[0]:"",notes:t.notes||"",completed_at:t.completed_at});}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
                           <button onClick={async()=>{if(!confirm("Delete this task?"))return;try{await fetch(`${API}/api/tasks/${t.id}`,{method:"DELETE"});setTasks(p=>p.filter(x=>x.id!==t.id));}catch(e){}}} style={{background:"rgba(239,68,68,0.1)",color:"#f87171",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>
                         </div>
                       </td>
