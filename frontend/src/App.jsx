@@ -332,6 +332,7 @@ export default function App() {
   const [editDonId, setEditDonId] = useState(null);
   const [newDon, setNewDon] = useState({name:"",address:"",bankName:"",accountNo:"",accountTitle:"",monthlyAmount:"",currency:"PKR",paymentMethod:"Bank Transfer",status:"Active",notes:""});
   const [editDon, setEditDon] = useState({});
+  const [activityLog, setActivityLog] = useState([]);
 
   // Auto update month
   useEffect(() => {
@@ -366,6 +367,12 @@ export default function App() {
       if (Array.isArray(ddn)) setDonations(ddn);
     } catch(e) {}
   }
+
+  async function fetchActivityLog() {
+    try { const r=await fetch(`${API}/api/activity-log`); const d=await r.json(); if(Array.isArray(d)) setActivityLog(d); } catch(e) {}
+  }
+
+  useEffect(()=>{ if(activeNav==="history"&&role==="ceo") fetchActivityLog(); },[activeNav]);
 
   function entryKey(id, month) { return `${id}_${month||currentMonth}`; }
   function getEntry(id, month) { return entries[entryKey(id,month)]||{}; }
@@ -627,6 +634,7 @@ export default function App() {
           {id:"clients",icon:"👤",label:"Clients"},
           {id:"employees",icon:"👥",label:"Employees"},
           {id:"finance",icon:"💰",label:"Finance"},
+          {id:"history",icon:"🕓",label:"History"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]:[
           {id:"monthly",icon:"📅",label:"Monthly Sheet"},
@@ -654,7 +662,7 @@ export default function App() {
   const Topbar = (
     <div style={{padding:"18px 26px 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexShrink:0}}>
       <div>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":activeNav==="finance"?"Finance":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":activeNav==="finance"?"Finance":activeNav==="history"?"History":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
         <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.03em"}}>{activeDept==="All"?"All Departments":activeDept}</div>
         <div style={{fontSize:12,color:"rgba(255,255,255,0.35)",marginTop:3}}>
           <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:"#22c55e",marginRight:5,verticalAlign:"middle"}}></span>
@@ -2753,6 +2761,64 @@ ${vaRows}
     </div>
   );
 
+  // ── HISTORY PANEL ──
+  const HistoryPanel = (
+    <div style={{flex:1,overflowY:"auto",padding:"24px 26px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:600}}>Activity History</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginTop:3}}>Last 30 days — who saved which entry and when</div>
+        </div>
+        <button onClick={fetchActivityLog} style={{background:"rgba(99,102,241,0.12)",border:"0.5px solid rgba(99,102,241,0.25)",color:"#a5b4fc",borderRadius:8,padding:"7px 16px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
+      </div>
+      {activityLog.length===0?(
+        <div style={{textAlign:"center",padding:60,color:"rgba(255,255,255,0.25)",fontSize:13}}>No activity in the last 30 days</div>
+      ):(
+        <div style={{background:"#13151f",border:"0.5px solid rgba(255,255,255,0.06)",borderRadius:12,overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{borderBottom:"0.5px solid rgba(255,255,255,0.07)"}}>
+                {["Date & Time","VA Name","Store","Dept","Month","Saved By"].map(h=>(
+                  <th key={h} style={{padding:"11px 14px",textAlign:"left",fontSize:10.5,color:"rgba(255,255,255,0.3)",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activityLog.map((row,i)=>{
+                const dt=new Date(row.saved_at);
+                const dateStr=dt.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+                const timeStr=dt.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",hour12:true});
+                const parts=(row.month_key||"").split("-");
+                const monthLabel=parts.length===2?`${MONTHS[parseInt(parts[1])-1]||""} ${parts[0]}`:(row.month_key||"—");
+                const dc=DEPT_COLORS[row.dept]||"#6366f1";
+                return (
+                  <tr key={row.id} style={{borderBottom:"0.5px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                    <td style={{padding:"10px 14px"}}>
+                      <div style={{fontSize:12.5,color:"#e2e8f0",fontWeight:500}}>{dateStr}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>{timeStr}</div>
+                    </td>
+                    <td style={{padding:"10px 14px",fontSize:13,color:"#fff",fontWeight:500}}>{row.va_name||"—"}</td>
+                    <td style={{padding:"10px 14px",fontSize:12.5,color:"rgba(255,255,255,0.65)"}}>{row.store_name||"—"}</td>
+                    <td style={{padding:"10px 14px"}}>
+                      <span style={{fontSize:10,padding:"3px 9px",borderRadius:5,background:`${dc}20`,color:dc,fontWeight:600}}>{row.dept||"—"}</span>
+                    </td>
+                    <td style={{padding:"10px 14px",fontSize:12,color:"rgba(255,255,255,0.5)"}}>{monthLabel}</td>
+                    <td style={{padding:"10px 14px"}}>
+                      <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(165,180,252,0.08)",border:"0.5px solid rgba(165,180,252,0.2)",borderRadius:6,padding:"3px 10px"}}>
+                        <div style={{width:6,height:6,borderRadius:"50%",background:"#a5b4fc"}}></div>
+                        <span style={{fontSize:12,color:"#a5b4fc",fontWeight:500}}>{row.saved_by||"—"}</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"Inter,system-ui,sans-serif",background:"#0a0b11",color:"#fff",overflow:"hidden"}}>
       {Sidebar}
@@ -2834,6 +2900,7 @@ ${vaRows}
         {activeNav==="clients"&&ClientsPanel}
         {activeNav==="employees"&&EmployeesPanel}
         {activeNav==="finance"&&FinancePanel}
+        {activeNav==="history"&&role==="ceo"&&HistoryPanel}
         {activeNav==="settings"&&SettingsPanel}
       </div>
     </div>
