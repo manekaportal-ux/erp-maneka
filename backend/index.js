@@ -51,7 +51,7 @@ app.put('/api/users/:id',async(req,res)=>{try{const{username,password,name,role}
 app.delete('/api/users/:id',async(req,res)=>{try{await pool.query('DELETE FROM users WHERE id=$1',[req.params.id]);res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
 
 // ── ACTIVITY LOG ──
-app.get('/api/activity-log',async(req,res)=>{try{const r=await pool.query("SELECT * FROM activity_log WHERE saved_at>NOW()-INTERVAL '30 days' ORDER BY saved_at DESC LIMIT 1000");res.json(r.rows);}catch(e){res.status(500).json({error:e.message});});
+app.get('/api/activity-log',async(req,res)=>{try{const r=await pool.query("SELECT * FROM activity_log WHERE saved_at>NOW()-INTERVAL '30 days' ORDER BY saved_at DESC LIMIT 1000");res.json(r.rows);}catch(e){res.status(500).json({error:e.message});}});
 
 // ── MANAGERS ──
 app.get('/api/managers',async(req,res)=>{try{const r=await pool.query('SELECT id,name,username,department,created_at FROM managers ORDER BY id ASC');res.json(r.rows);}catch(e){res.status(500).json({error:e.message});}});
