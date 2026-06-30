@@ -333,6 +333,18 @@ export default function App() {
   const [newDon, setNewDon] = useState({name:"",address:"",bankName:"",accountNo:"",accountTitle:"",monthlyAmount:"",currency:"PKR",paymentMethod:"Bank Transfer",status:"Active",notes:""});
   const [editDon, setEditDon] = useState({});
   const [activityLog, setActivityLog] = useState([]);
+  const [managerDept, setManagerDept] = useState("");
+  const [tasks, setTasks] = useState([]);
+  const [taskFilter, setTaskFilter] = useState("All");
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTask, setNewTask] = useState({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:"OnBuy",notes:""});
+  const [editTaskId, setEditTaskId] = useState(null);
+  const [editTask, setEditTask] = useState({});
+  const [managers, setManagers] = useState([]);
+  const [showAddMgr, setShowAddMgr] = useState(false);
+  const [editMgrId, setEditMgrId] = useState(null);
+  const [editMgr, setEditMgr] = useState({});
+  const [newMgr, setNewMgr] = useState({name:"",username:"",department:"OnBuy",pin:""});
 
   // Auto update month
   useEffect(() => {
@@ -372,7 +384,22 @@ export default function App() {
     try { const r=await fetch(`${API}/api/activity-log`); const d=await r.json(); if(Array.isArray(d)) setActivityLog(d); } catch(e) {}
   }
 
+  async function fetchTasks(dept) {
+    try {
+      const url = dept&&dept!=="All" ? `${API}/api/tasks?dept=${encodeURIComponent(dept)}` : `${API}/api/tasks`;
+      const r = await fetch(url); const d = await r.json(); if(Array.isArray(d)) setTasks(d);
+    } catch(e) {}
+  }
+
+  async function fetchManagers() {
+    try { const r=await fetch(`${API}/api/managers`); const d=await r.json(); if(Array.isArray(d)) setManagers(d); } catch(e) {}
+  }
+
   useEffect(()=>{ if(activeNav==="history"&&role==="ceo") fetchActivityLog(); },[activeNav]);
+  useEffect(()=>{ if(activeNav==="tasks"&&(role==="ceo"||role==="admin")) fetchTasks("All"); },[activeNav]);
+  useEffect(()=>{ if(activeNav==="tasks"&&role==="ceo") fetchManagers(); },[activeNav]);
+  useEffect(()=>{ if(role==="manager"&&managerDept) fetchTasks(managerDept); },[role,managerDept]);
+  useEffect(()=>{ if(settingsTab==="managers"&&role==="ceo") fetchManagers(); },[settingsTab]);
 
   function entryKey(id, month) { return `${id}_${month||currentMonth}`; }
   function getEntry(id, month) { return entries[entryKey(id,month)]||{}; }
@@ -544,7 +571,8 @@ export default function App() {
       const d = await r.json();
       if (d.success) {
         setCurrentUser(username.trim()); setRole(d.role); setUsername(""); setPassword(""); setLoginErr("");
-        setActiveNav(d.role==="ceo"?"dashboard":"monthly");
+        if(d.department) setManagerDept(d.department);
+        setActiveNav(d.role==="ceo"?"dashboard":d.role==="manager"?"tasks":"monthly");
       } else { setLoginErr(d.message||"Invalid username or password"); }
     } catch(e) { setLoginErr("Connection error — try again"); }
     setLoginLoading(false);
@@ -596,6 +624,107 @@ export default function App() {
     // Fall through to main CEO ERP below
   }
 
+  // ── TASK HELPERS ──
+  const PRTY_C = {Low:"#22c55e",Medium:"#f59e0b",High:"#f97316",Urgent:"#ef4444"};
+  const STAT_C = {Pending:"#6366f1","In Progress":"#0ea5e9",Completed:"#22c55e",Overdue:"#ef4444"};
+  const effSt = (t) => { if(t.status==="Completed")return"Completed"; if(t.due_date){const d=new Date(t.due_date+"T00:00:00"),now=new Date();now.setHours(0,0,0,0);if(d<now)return"Overdue";}return t.status; };
+
+  // ── MANAGER VIEW ──
+  if (role==="manager") {
+    const mc = DEPT_COLORS[managerDept]||"#6366f1";
+    const ms = {total:tasks.length,pending:tasks.filter(t=>effSt(t)==="Pending").length,inProgress:tasks.filter(t=>effSt(t)==="In Progress").length,completed:tasks.filter(t=>effSt(t)==="Completed").length,overdue:tasks.filter(t=>effSt(t)==="Overdue").length};
+    return (
+      <div style={{minHeight:"100vh",background:"#0a0b11",color:"#fff",fontFamily:"Inter,system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
+        <div style={{background:"#13151f",borderBottom:"0.5px solid rgba(255,255,255,0.06)",padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:34,height:34,borderRadius:9,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700}}>EM</div>
+            <div>
+              <div style={{fontSize:14,fontWeight:600}}>Task Manager</div>
+              <div style={{fontSize:11,color:mc,fontWeight:500}}>{managerDept} Department</div>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.4)"}}>Logged in as <span style={{color:"#fff",fontWeight:500}}>{currentUser}</span></span>
+            <button onClick={()=>{setRole(null);setManagerDept("");setTasks([]);}} style={{background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",color:"#f87171",borderRadius:7,padding:"6px 14px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Logout</button>
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:20}}>
+            {[["Total",ms.total,"#6366f1"],["Pending",ms.pending,"#6366f1"],["In Progress",ms.inProgress,"#0ea5e9"],["Completed",ms.completed,"#22c55e"],["Overdue",ms.overdue,"#ef4444"]].map(([lbl,val,c])=>(
+              <div key={lbl} style={{background:"#13151f",border:`0.5px solid ${c}30`,borderRadius:10,padding:"14px 16px"}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{lbl}</div>
+                <div style={{fontSize:24,fontWeight:700,color:c,marginTop:4}}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{marginBottom:16}}>
+            {!showAddTask&&<button onClick={()=>setShowAddTask(true)} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ Add Task</button>}
+            {showAddTask&&(
+              <div style={{background:"#13151f",border:`0.5px solid ${mc}40`,borderRadius:12,padding:18,marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:600,color:mc,marginBottom:12}}>New Task — {managerDept}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+                  <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Title *</div><input value={newTask.title} onChange={e=>setNewTask(p=>({...p,title:e.target.value}))} placeholder="Task title..." style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                  <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Priority</div><select value={newTask.priority} onChange={e=>setNewTask(p=>({...p,priority:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["Low","Medium","High","Urgent"].map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+                  <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Due Date</div><input type="date" value={newTask.due_date} onChange={e=>setNewTask(p=>({...p,due_date:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",colorScheme:"dark"}}/></div>
+                </div>
+                <div style={{marginBottom:10}}><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Description</div><textarea value={newTask.description} onChange={e=>setNewTask(p=>({...p,description:e.target.value}))} rows={2} placeholder="Task description..." style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical"}}/></div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={async()=>{if(!newTask.title.trim())return alert("Title required!");try{const r=await fetch(`${API}/api/tasks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...newTask,assigned_to_dept:managerDept,assigned_by:currentUser})});const d=await r.json();if(d.id){setTasks(p=>[d,...p]);setNewTask({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:managerDept,notes:""});setShowAddTask(false);}}catch(e){}}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Create</button>
+                  <button onClick={()=>setShowAddTask(false)} style={{background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"9px 16px",color:"rgba(255,255,255,0.5)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {tasks.length===0&&<div style={{textAlign:"center",padding:40,color:"rgba(255,255,255,0.2)",fontSize:13}}>No tasks for {managerDept} yet.</div>}
+            {tasks.map(t=>{
+              const st=effSt(t);const sc=STAT_C[st]||"#6366f1";const pc=PRTY_C[t.priority]||"#f59e0b";const isEd=editTaskId===t.id;
+              return (
+                <div key={t.id} style={{background:"#13151f",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"16px 18px"}}>
+                  {isEd?(
+                    <div>
+                      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8,marginBottom:8}}>
+                        <input value={editTask.title||""} onChange={e=>setEditTask(p=>({...p,title:e.target.value}))} style={{background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+                        <select value={editTask.priority||"Medium"} onChange={e=>setEditTask(p=>({...p,priority:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["Low","Medium","High","Urgent"].map(p=><option key={p} value={p}>{p}</option>)}</select>
+                        <input type="date" value={editTask.due_date||""} onChange={e=>setEditTask(p=>({...p,due_date:e.target.value}))} style={{background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,outline:"none",fontFamily:"inherit",colorScheme:"dark"}}/>
+                      </div>
+                      <div style={{marginBottom:8}}><select value={editTask.status||"Pending"} onChange={e=>setEditTask(p=>({...p,status:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["Pending","In Progress","Completed"].map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+                      <textarea value={editTask.description||""} onChange={e=>setEditTask(p=>({...p,description:e.target.value}))} rows={2} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical",marginBottom:8}}/>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={async()=>{try{const ca=editTask.status==="Completed"&&t.status!=="Completed"?new Date().toISOString():t.completed_at||null;await fetch(`${API}/api/tasks/${t.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({...editTask,completed_at:ca})});setTasks(p=>p.map(x=>x.id===t.id?{...x,...editTask,completed_at:ca}:x));setEditTaskId(null);}catch(e){}}} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:7,padding:"6px 16px",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Save ✓</button>
+                        <button onClick={()=>setEditTaskId(null)} style={{background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.5)",border:"none",borderRadius:7,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <span style={{fontSize:14,fontWeight:600}}>{t.title}</span>
+                          <span style={{fontSize:10,padding:"2px 8px",borderRadius:5,background:`${sc}18`,color:sc,fontWeight:600}}>{st}</span>
+                          <span style={{fontSize:10,padding:"2px 8px",borderRadius:5,background:`${pc}18`,color:pc,fontWeight:600}}>{t.priority}</span>
+                        </div>
+                        {t.description&&<div style={{fontSize:12,color:"rgba(255,255,255,0.45)",marginBottom:4}}>{t.description}</div>}
+                        <div style={{display:"flex",gap:16,fontSize:11,color:"rgba(255,255,255,0.3)"}}>
+                          {t.due_date&&<span style={{color:st==="Overdue"?"#f87171":"inherit"}}>Due: {new Date(t.due_date+"T00:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</span>}
+                          {t.assigned_by&&<span>By: {t.assigned_by}</span>}
+                          <span>Created: {new Date(t.created_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short"})}</span>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:8,flexShrink:0}}>
+                        {t.status!=="Completed"&&<button onClick={async()=>{const ns=t.status==="Pending"?"In Progress":"Completed";const ca=ns==="Completed"?new Date().toISOString():null;try{await fetch(`${API}/api/tasks/${t.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:t.title,description:t.description||"",assigned_by:t.assigned_by,assigned_to_dept:t.assigned_to_dept,priority:t.priority,status:ns,due_date:t.due_date,notes:t.notes||"",completed_at:ca})});setTasks(p=>p.map(x=>x.id===t.id?{...x,status:ns,completed_at:ca}:x));}catch(e){}}} style={{background:t.status==="Pending"?"rgba(14,165,233,0.12)":"rgba(34,197,94,0.12)",color:t.status==="Pending"?"#38bdf8":"#86efac",border:"none",borderRadius:7,padding:"6px 14px",fontSize:11.5,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>{t.status==="Pending"?"→ In Progress":"✓ Complete"}</button>}
+                        <button onClick={()=>{setEditTaskId(t.id);setEditTask({title:t.title,description:t.description||"",priority:t.priority,status:t.status,due_date:t.due_date?t.due_date.split("T")[0]:"",notes:t.notes||"",assigned_to_dept:t.assigned_to_dept,completed_at:t.completed_at});}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:7,padding:"6px 12px",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── SIDEBAR ──
   const Sidebar = (
     <div style={{width:236,background:"#0a0b11",borderRight:"0.5px solid rgba(255,255,255,0.05)",display:"flex",flexDirection:"column",flexShrink:0}}>
@@ -634,6 +763,7 @@ export default function App() {
           {id:"clients",icon:"👤",label:"Clients"},
           {id:"employees",icon:"👥",label:"Employees"},
           {id:"finance",icon:"💰",label:"Finance"},
+          {id:"tasks",icon:"✅",label:"Tasks"},
           {id:"history",icon:"🕓",label:"History"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]:[
@@ -662,7 +792,7 @@ export default function App() {
   const Topbar = (
     <div style={{padding:"18px 26px 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexShrink:0}}>
       <div>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":activeNav==="finance"?"Finance":activeNav==="history"?"History":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":activeNav==="finance"?"Finance":activeNav==="tasks"?"Tasks":activeNav==="history"?"History":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
         <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.03em"}}>{activeDept==="All"?"All Departments":activeDept}</div>
         <div style={{fontSize:12,color:"rgba(255,255,255,0.35)",marginTop:3}}>
           <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:"#22c55e",marginRight:5,verticalAlign:"middle"}}></span>
@@ -1047,7 +1177,7 @@ export default function App() {
   const SettingsPanel = (
     <div style={{flex:1,overflowY:"auto",padding:"16px 26px"}}>
       <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"0.5px solid rgba(255,255,255,0.06)"}}>
-        {[["general","⚙️ General"],["va","👥 VA Management"],["trash","🗑️ VA Trash"],...(role==="ceo"?[["users","🔐 User Management"]]:[])] .map(([id,lbl])=>(
+        {[["general","⚙️ General"],["va","👥 VA Management"],["trash","🗑️ VA Trash"],...(role==="ceo"?[["users","🔐 User Management"],["managers","🏷️ Managers"]]:[])] .map(([id,lbl])=>(
           <button key={id} onClick={()=>setSettingsTab(id)} style={{padding:"8px 18px",fontSize:12.5,cursor:"pointer",color:settingsTab===id?"#fff":"rgba(255,255,255,0.35)",borderBottom:settingsTab===id?"2px solid #6366f1":"2px solid transparent",background:"none",border:"none",borderBottom:settingsTab===id?"2px solid #6366f1":"2px solid transparent",fontFamily:"inherit",fontWeight:settingsTab===id?500:400,marginBottom:-0.5}}>{lbl}</button>
         ))}
       </div>
@@ -1178,6 +1308,66 @@ export default function App() {
       {settingsTab==="users"&&(
         <div style={{maxWidth:600}}>
           <UserManagement role={role} API={API}/>
+        </div>
+      )}
+      {settingsTab==="managers"&&role==="ceo"&&(
+        <div style={{maxWidth:700}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:500}}>🏷️ Manager Accounts</div>
+            <button onClick={()=>{setShowAddMgr(!showAddMgr);setEditMgrId(null);}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"7px 16px",color:"#fff",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ Add Manager</button>
+          </div>
+          <div style={{fontSize:11.5,color:"rgba(255,255,255,0.3)",marginBottom:14,background:"rgba(99,102,241,0.06)",border:"0.5px solid rgba(99,102,241,0.15)",borderRadius:8,padding:"10px 14px"}}>
+            Managers log in with their <strong style={{color:"#a5b4fc"}}>username</strong> + <strong style={{color:"#a5b4fc"}}>PIN</strong> on the main login screen. They see only their department's tasks.
+          </div>
+          {showAddMgr&&(
+            <div style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.3)",borderRadius:12,padding:20,marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:500,color:"#a5b4fc",marginBottom:14}}>New Manager</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Full Name</div><input value={newMgr.name} onChange={e=>setNewMgr(p=>({...p,name:e.target.value}))} placeholder="e.g. OnBuy Manager" style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Username (for login)</div><input value={newMgr.username} onChange={e=>setNewMgr(p=>({...p,username:e.target.value}))} placeholder="e.g. onbuy" style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Department</div><select value={newMgr.department} onChange={e=>setNewMgr(p=>({...p,department:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+                <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>PIN</div><input value={newMgr.pin} onChange={e=>setNewMgr(p=>({...p,pin:e.target.value}))} placeholder="e.g. 1234" style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={async()=>{if(!newMgr.name.trim()||!newMgr.username.trim()||!newMgr.pin.trim())return alert("Name, username and PIN required!");try{const r=await fetch(`${API}/api/managers`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(newMgr)});const d=await r.json();if(d.id){setManagers(p=>[...p,d]);setNewMgr({name:"",username:"",department:"OnBuy",pin:""});setShowAddMgr(false);}}catch(e){alert("Error: "+e.message);}}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Add Manager</button>
+                <button onClick={()=>setShowAddMgr(false)} style={{background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"9px 16px",color:"rgba(255,255,255,0.5)",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+              </div>
+            </div>
+          )}
+          <div style={{background:"#13151f",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:12,overflow:"hidden"}}>
+            <div style={{padding:"12px 16px",borderBottom:"0.5px solid rgba(255,255,255,0.06)"}}><span style={{fontSize:12.5,fontWeight:500}}>All Managers ({managers.length})</span></div>
+            {managers.length===0&&<div style={{padding:"24px",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:12}}>No managers yet — they'll appear after first deploy.</div>}
+            {managers.map(m=>(
+              <div key={m.id}>
+                {editMgrId===m.id?(
+                  <div style={{padding:"14px 16px",borderBottom:"0.5px solid rgba(255,255,255,0.04)",background:"rgba(99,102,241,0.05)"}}>
+                    <div style={{fontSize:11,color:"#a5b4fc",marginBottom:10,fontWeight:500}}>Editing: {m.name}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                      <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Full Name</div><input value={editMgr.name||""} onChange={e=>setEditMgr(p=>({...p,name:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                      <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Username</div><input value={editMgr.username||""} onChange={e=>setEditMgr(p=>({...p,username:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                      <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Department</div><select value={editMgr.department||"OnBuy"} onChange={e=>setEditMgr(p=>({...p,department:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+                      <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>PIN (visible for editing)</div><input value={editMgr.pin||""} onChange={e=>setEditMgr(p=>({...p,pin:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={async()=>{try{await fetch(`${API}/api/managers/${m.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(editMgr)});setManagers(p=>p.map(x=>x.id===m.id?{...x,...editMgr}:x));setEditMgrId(null);}catch(e){}}} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:7,padding:"7px 16px",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Save ✓</button>
+                      <button onClick={()=>setEditMgrId(null)} style={{background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.5)",border:"none",borderRadius:7,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                    </div>
+                  </div>
+                ):(
+                  <div style={{display:"flex",alignItems:"center",padding:"12px 16px",borderBottom:"0.5px solid rgba(255,255,255,0.04)",gap:10}}>
+                    <div style={{width:36,height:36,borderRadius:9,background:`${DEPT_COLORS[m.department]||"#6366f1"}20`,border:`1px solid ${DEPT_COLORS[m.department]||"#6366f1"}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:DEPT_COLORS[m.department]||"#6366f1",flexShrink:0}}>{(m.name||"M")[0].toUpperCase()}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#fff"}}>{m.name}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>@{m.username} · PIN: ••••</div>
+                    </div>
+                    <span style={{fontSize:10,padding:"3px 9px",borderRadius:5,background:`${DEPT_COLORS[m.department]||"#6366f1"}20`,color:DEPT_COLORS[m.department]||"#6366f1",fontWeight:600}}>{m.department}</span>
+                    <button onClick={async()=>{try{const r=await fetch(`${API}/api/managers/${m.id}`);const full=managers.find(x=>x.id===m.id);setEditMgr({name:full.name,username:full.username,department:full.department,pin:""});setEditMgrId(m.id);}catch(e){}}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                    <button onClick={async()=>{if(!confirm("Delete this manager?"))return;try{await fetch(`${API}/api/managers/${m.id}`,{method:"DELETE"});setManagers(p=>p.filter(x=>x.id!==m.id));}catch(e){}}} style={{background:"rgba(239,68,68,0.1)",color:"#f87171",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -2819,6 +3009,101 @@ ${vaRows}
     </div>
   );
 
+  // ── TASKS PANEL (CEO/Admin) ──
+  const filtTasks = tasks.filter(t=>taskFilter==="All"||t.assigned_to_dept===taskFilter);
+  const tStats = {total:filtTasks.length,pending:filtTasks.filter(t=>effSt(t)==="Pending").length,inProgress:filtTasks.filter(t=>effSt(t)==="In Progress").length,completed:filtTasks.filter(t=>effSt(t)==="Completed").length,overdue:filtTasks.filter(t=>effSt(t)==="Overdue").length};
+  const TasksPanel = (
+    <div style={{flex:1,overflowY:"auto",padding:"16px 26px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+        <div style={{display:"flex",gap:6}}>
+          {["All","OnBuy","eBay","Amazon","TikTok Shop"].map(d=>(
+            <button key={d} onClick={()=>setTaskFilter(d)} style={{padding:"5px 14px",fontSize:11.5,cursor:"pointer",borderRadius:7,border:`1px solid ${taskFilter===d?(DEPT_COLORS[d]||"#6366f1"):"rgba(255,255,255,0.1)"}`,background:taskFilter===d?`${(DEPT_COLORS[d]||"#6366f1")}20`:"transparent",color:taskFilter===d?(DEPT_COLORS[d]||"#6366f1"):"rgba(255,255,255,0.4)",fontFamily:"inherit",fontWeight:taskFilter===d?600:400,transition:"all 0.12s"}}>{d}</button>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>fetchTasks("All")} style={{background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",borderRadius:7,padding:"7px 14px",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
+          <button onClick={()=>{setShowAddTask(!showAddTask);setEditTaskId(null);}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"8px 18px",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ New Task</button>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:18}}>
+        {[["Total",tStats.total,"#6366f1"],["Pending",tStats.pending,"#6366f1"],["In Progress",tStats.inProgress,"#0ea5e9"],["Completed",tStats.completed,"#22c55e"],["Overdue",tStats.overdue,"#ef4444"]].map(([lbl,val,c])=>(
+          <div key={lbl} style={{background:"#13151f",border:`0.5px solid ${c}30`,borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{lbl}</div>
+            <div style={{fontSize:22,fontWeight:700,color:c,marginTop:4}}>{val}</div>
+          </div>
+        ))}
+      </div>
+      {showAddTask&&(
+        <div style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.3)",borderRadius:12,padding:20,marginBottom:16}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#a5b4fc",marginBottom:14}}>New Task</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
+            <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Title *</div><input value={newTask.title} onChange={e=>setNewTask(p=>({...p,title:e.target.value}))} placeholder="Task title..." style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+            <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Department</div><select value={newTask.assigned_to_dept} onChange={e=>setNewTask(p=>({...p,assigned_to_dept:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+            <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Priority</div><select value={newTask.priority} onChange={e=>setNewTask(p=>({...p,priority:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["Low","Medium","High","Urgent"].map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+            <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Due Date</div><input type="date" value={newTask.due_date} onChange={e=>setNewTask(p=>({...p,due_date:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",colorScheme:"dark"}}/></div>
+          </div>
+          <div style={{marginBottom:10}}><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Description</div><textarea value={newTask.description} onChange={e=>setNewTask(p=>({...p,description:e.target.value}))} placeholder="Task description..." rows={2} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical"}}/></div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={async()=>{if(!newTask.title.trim())return alert("Title required!");try{const r=await fetch(`${API}/api/tasks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...newTask,assigned_by:currentUser})});const d=await r.json();if(d.id){setTasks(p=>[d,...p]);setNewTask({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:newTask.assigned_to_dept,notes:""});setShowAddTask(false);}}catch(e){}}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Create Task</button>
+            <button onClick={()=>setShowAddTask(false)} style={{background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"9px 16px",color:"rgba(255,255,255,0.5)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          </div>
+        </div>
+      )}
+      <div style={{background:"#13151f",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:12,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead>
+            <tr style={{borderBottom:"0.5px solid rgba(255,255,255,0.07)"}}>
+              {["Title","Department","Priority","Status","Due Date","Assigned By","Actions"].map(h=>(
+                <th key={h} style={{padding:"11px 14px",textAlign:"left",fontSize:10.5,color:"rgba(255,255,255,0.3)",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtTasks.length===0&&<tr><td colSpan={7} style={{padding:"32px",textAlign:"center",color:"rgba(255,255,255,0.2)",fontSize:13}}>No tasks found. Create one above.</td></tr>}
+            {filtTasks.map((t,i)=>{
+              const st=effSt(t);const sc=STAT_C[st]||"#6366f1";const pc=PRTY_C[t.priority]||"#f59e0b";const dc=DEPT_COLORS[t.assigned_to_dept]||"#6366f1";const isEd=editTaskId===t.id;
+              return (
+                <tr key={t.id} style={{borderBottom:"0.5px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                  {isEd?(
+                    <td colSpan={7} style={{padding:"14px 16px",background:"rgba(99,102,241,0.04)"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:8}}>
+                        <input value={editTask.title||""} onChange={e=>setEditTask(p=>({...p,title:e.target.value}))} style={{background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                        <select value={editTask.assigned_to_dept||"OnBuy"} onChange={e=>setEditTask(p=>({...p,assigned_to_dept:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select>
+                        <select value={editTask.priority||"Medium"} onChange={e=>setEditTask(p=>({...p,priority:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["Low","Medium","High","Urgent"].map(p=><option key={p} value={p}>{p}</option>)}</select>
+                        <select value={editTask.status||"Pending"} onChange={e=>setEditTask(p=>({...p,status:e.target.value}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none"}}>{["Pending","In Progress","Completed"].map(s=><option key={s} value={s}>{s}</option>)}</select>
+                        <input type="date" value={editTask.due_date||""} onChange={e=>setEditTask(p=>({...p,due_date:e.target.value}))} style={{background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,outline:"none",fontFamily:"inherit",colorScheme:"dark"}}/>
+                      </div>
+                      <textarea value={editTask.description||""} onChange={e=>setEditTask(p=>({...p,description:e.target.value}))} placeholder="Description..." rows={2} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"7px 10px",color:"#fff",fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical",marginBottom:8}}/>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={async()=>{try{const ca=editTask.status==="Completed"&&t.status!=="Completed"?new Date().toISOString():t.completed_at||null;await fetch(`${API}/api/tasks/${t.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({...editTask,completed_at:ca})});setTasks(p=>p.map(x=>x.id===t.id?{...x,...editTask,completed_at:ca}:x));setEditTaskId(null);}catch(e){}}} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:7,padding:"6px 16px",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Save ✓</button>
+                        <button onClick={()=>setEditTaskId(null)} style={{background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.5)",border:"none",borderRadius:7,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                      </div>
+                    </td>
+                  ):(
+                    <>
+                      <td style={{padding:"11px 14px"}}><div style={{fontSize:13,fontWeight:500}}>{t.title}</div>{t.description&&<div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2,maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.description}</div>}</td>
+                      <td style={{padding:"11px 14px"}}><span style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:`${dc}20`,color:dc,fontWeight:600}}>{t.assigned_to_dept}</span></td>
+                      <td style={{padding:"11px 14px"}}><span style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:`${pc}20`,color:pc,fontWeight:600}}>{t.priority}</span></td>
+                      <td style={{padding:"11px 14px"}}><span style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:`${sc}18`,color:sc,fontWeight:600}}>{st}</span></td>
+                      <td style={{padding:"11px 14px",fontSize:12,color:st==="Overdue"?"#f87171":"rgba(255,255,255,0.5)"}}>{t.due_date?new Date(t.due_date+"T00:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—"}</td>
+                      <td style={{padding:"11px 14px",fontSize:12,color:"rgba(255,255,255,0.4)"}}>{t.assigned_by||"—"}</td>
+                      <td style={{padding:"11px 14px"}}>
+                        <div style={{display:"flex",gap:6}}>
+                          <button onClick={()=>{setEditTaskId(t.id);setEditTask({title:t.title,description:t.description||"",assigned_to_dept:t.assigned_to_dept,priority:t.priority,status:t.status,due_date:t.due_date?t.due_date.split("T")[0]:"",notes:t.notes||"",completed_at:t.completed_at});}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                          <button onClick={async()=>{if(!confirm("Delete this task?"))return;try{await fetch(`${API}/api/tasks/${t.id}`,{method:"DELETE"});setTasks(p=>p.filter(x=>x.id!==t.id));}catch(e){}}} style={{background:"rgba(239,68,68,0.1)",color:"#f87171",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>
+                        </div>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"Inter,system-ui,sans-serif",background:"#0a0b11",color:"#fff",overflow:"hidden"}}>
       {Sidebar}
@@ -2900,6 +3185,7 @@ ${vaRows}
         {activeNav==="clients"&&ClientsPanel}
         {activeNav==="employees"&&EmployeesPanel}
         {activeNav==="finance"&&FinancePanel}
+        {activeNav==="tasks"&&TasksPanel}
         {activeNav==="history"&&role==="ceo"&&HistoryPanel}
         {activeNav==="settings"&&SettingsPanel}
       </div>
