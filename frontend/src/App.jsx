@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 
 const API = "";
 const DEPTS = ["All", "OnBuy", "eBay", "Amazon", "TikTok Shop"];
@@ -270,6 +270,7 @@ export default function App() {
   const [role, setRole] = useState(null);
   const [username, setUsername] = useState("");
   const [currentUser, setCurrentUser] = useState("");
+  const [currentUserName, setCurrentUserName] = useState("");
   const [password, setPassword] = useState("");
   const [loginErr, setLoginErr] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
@@ -344,7 +345,12 @@ export default function App() {
   const [showAddMgr, setShowAddMgr] = useState(false);
   const [editMgrId, setEditMgrId] = useState(null);
   const [editMgr, setEditMgr] = useState({});
-  const [newMgr, setNewMgr] = useState({name:"",username:"",department:"OnBuy",pin:""});
+  const [newMgr, setNewMgr] = useState({name:"",username:"",department:"OnBuy",pin:"",whatsapp:""});
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [showChat, setShowChat] = useState(false);
+  const [whatsappConfig, setWhatsappConfig] = useState({instance_id:"",token:"",enabled:false});
+  const chatEndRef = useRef(null);
 
   // Auto update month
   useEffect(() => {
@@ -397,11 +403,35 @@ export default function App() {
     try { const r=await fetch(`${API}/api/managers`); const d=await r.json(); if(Array.isArray(d)) setManagers(d); } catch(e) {}
   }
 
+  async function fetchChat() {
+    try { const r=await fetch(`${API}/api/chat`); const d=await r.json(); if(Array.isArray(d)){ setChatMessages(d); setTimeout(()=>chatEndRef.current?.scrollIntoView({behavior:"smooth"}),50); } } catch(e) {}
+  }
+
+  async function sendChat() {
+    if(!chatInput.trim()) return;
+    try {
+      const r=await fetch(`${API}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({from_username:currentUser,from_name:currentUserName||currentUser,from_role:role,message:chatInput.trim()})});
+      const d=await r.json();
+      if(d.id){ setChatMessages(p=>[...p,d]); setChatInput(""); setTimeout(()=>chatEndRef.current?.scrollIntoView({behavior:"smooth"}),50); }
+    } catch(e) {}
+  }
+
+  async function fetchWhatsappConfig() {
+    try { const r=await fetch(`${API}/api/whatsapp-config`); const d=await r.json(); setWhatsappConfig(d); } catch(e) {}
+  }
+
   useEffect(()=>{ if(activeNav==="history"&&role==="ceo") fetchActivityLog(); },[activeNav]);
   useEffect(()=>{ if(activeNav==="tasks"&&(role==="ceo"||role==="admin")) fetchTasks("All"); },[activeNav]);
   useEffect(()=>{ if(activeNav==="tasks"&&(role==="ceo"||role==="admin")) fetchManagers(); },[activeNav]);
   useEffect(()=>{ if(role==="manager"&&managerDept&&currentUser) fetchTasks(managerDept,currentUser); },[role,managerDept,currentUser]);
   useEffect(()=>{ if(settingsTab==="managers"&&role==="ceo") fetchManagers(); },[settingsTab]);
+  useEffect(()=>{ if(settingsTab==="whatsapp"&&role==="ceo") fetchWhatsappConfig(); },[settingsTab]);
+  useEffect(()=>{
+    if(activeNav==="chat"&&(role==="ceo"||role==="admin")){ fetchChat(); const id=setInterval(fetchChat,5000); return()=>clearInterval(id); }
+  },[activeNav,role]);
+  useEffect(()=>{
+    if(showChat){ fetchChat(); const id=setInterval(fetchChat,5000); return()=>clearInterval(id); }
+  },[showChat]);
 
   function entryKey(id, month) { return `${id}_${month||currentMonth}`; }
   function getEntry(id, month) { return entries[entryKey(id,month)]||{}; }
@@ -572,7 +602,7 @@ export default function App() {
       const r = await fetch(`${API}/api/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:username.trim(),password})});
       const d = await r.json();
       if (d.success) {
-        setCurrentUser(username.trim()); setRole(d.role); setUsername(""); setPassword(""); setLoginErr("");
+        setCurrentUser(username.trim()); setCurrentUserName(d.name||username.trim()); setRole(d.role); setUsername(""); setPassword(""); setLoginErr("");
         if(d.department) setManagerDept(d.department);
         setActiveNav(d.role==="ceo"?"dashboard":d.role==="manager"?"tasks":"monthly");
       } else { setLoginErr(d.message||"Invalid username or password"); }
@@ -645,9 +675,10 @@ export default function App() {
               <div style={{fontSize:11,color:mc,fontWeight:500}}>{managerDept} Department</div>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontSize:12,color:"rgba(255,255,255,0.4)"}}>Logged in as <span style={{color:"#fff",fontWeight:500}}>{currentUser}</span></span>
-            <button onClick={()=>{setRole(null);setManagerDept("");setTasks([]);}} style={{background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",color:"#f87171",borderRadius:7,padding:"6px 14px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Logout</button>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.4)"}}>Logged in as <span style={{color:"#fff",fontWeight:500}}>{currentUserName||currentUser}</span></span>
+            <button onClick={()=>{setShowChat(true);}} style={{background:"rgba(99,102,241,0.1)",border:"0.5px solid rgba(99,102,241,0.3)",color:"#a5b4fc",borderRadius:7,padding:"6px 14px",fontSize:11.5,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>💬 Chat</button>
+            <button onClick={()=>{setRole(null);setManagerDept("");setTasks([]);setShowChat(false);}} style={{background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",color:"#f87171",borderRadius:7,padding:"6px 14px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Logout</button>
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
@@ -658,24 +689,6 @@ export default function App() {
                 <div style={{fontSize:24,fontWeight:700,color:c,marginTop:4}}>{val}</div>
               </div>
             ))}
-          </div>
-          <div style={{marginBottom:16}}>
-            {!showAddTask&&<button onClick={()=>setShowAddTask(true)} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ Add Task</button>}
-            {showAddTask&&(
-              <div style={{background:"#13151f",border:`0.5px solid ${mc}40`,borderRadius:12,padding:18,marginBottom:16}}>
-                <div style={{fontSize:13,fontWeight:600,color:mc,marginBottom:12}}>New Task — {managerDept}</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-                  <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Title *</div><input value={newTask.title} onChange={e=>setNewTask(p=>({...p,title:e.target.value}))} placeholder="Task title..." style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
-                  <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Priority</div><select value={newTask.priority} onChange={e=>setNewTask(p=>({...p,priority:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["Low","Medium","High","Urgent"].map(p=><option key={p} value={p}>{p}</option>)}</select></div>
-                  <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Due Date</div><input type="date" value={newTask.due_date} onChange={e=>setNewTask(p=>({...p,due_date:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",colorScheme:"dark"}}/></div>
-                </div>
-                <div style={{marginBottom:10}}><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Description</div><textarea value={newTask.description} onChange={e=>setNewTask(p=>({...p,description:e.target.value}))} rows={2} placeholder="Task description..." style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical"}}/></div>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={async()=>{if(!newTask.title.trim())return alert("Title required!");try{const r=await fetch(`${API}/api/tasks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...newTask,assigned_to_dept:managerDept,assigned_by:currentUser})});const d=await r.json();if(d.id){setTasks(p=>[d,...p]);setNewTask({title:"",description:"",priority:"Medium",due_date:"",assigned_to_dept:managerDept,notes:""});setShowAddTask(false);}}catch(e){}}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Create</button>
-                  <button onClick={()=>setShowAddTask(false)} style={{background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"9px 16px",color:"rgba(255,255,255,0.5)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                </div>
-              </div>
-            )}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {tasks.length===0&&<div style={{textAlign:"center",padding:40,color:"rgba(255,255,255,0.2)",fontSize:13}}>No tasks for {managerDept} yet.</div>}
@@ -723,6 +736,34 @@ export default function App() {
             })}
           </div>
         </div>
+        {showChat&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.78)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+            <div style={{background:"#13151f",border:"0.5px solid rgba(99,102,241,0.3)",borderRadius:16,width:"100%",maxWidth:520,height:"72vh",display:"flex",flexDirection:"column"}}>
+              <div style={{padding:"16px 20px",borderBottom:"0.5px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+                <div style={{fontSize:14,fontWeight:600}}>💬 Team Chat</div>
+                <button onClick={()=>setShowChat(false)} style={{background:"rgba(255,255,255,0.06)",border:"none",color:"rgba(255,255,255,0.5)",borderRadius:8,padding:"5px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>✕ Close</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+                {chatMessages.length===0&&<div style={{textAlign:"center",color:"rgba(255,255,255,0.2)",fontSize:13,marginTop:40}}>No messages yet. Start the conversation!</div>}
+                {chatMessages.map((msg,i)=>{
+                  const isMe=msg.from_username===currentUser;
+                  const rc=msg.from_role==="ceo"?"#6366f1":msg.from_role==="admin"?"#22c55e":"#f97316";
+                  return (
+                    <div key={msg.id||i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",marginBottom:2}}>{isMe?"You":msg.from_name}<span style={{color:rc,fontSize:9,textTransform:"uppercase",fontWeight:600,marginLeft:5}}>{isMe?"":msg.from_role}</span> · {new Date(msg.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
+                      <div style={{background:isMe?"rgba(99,102,241,0.18)":"rgba(255,255,255,0.06)",border:`0.5px solid ${isMe?"rgba(99,102,241,0.3)":"rgba(255,255,255,0.07)"}`,borderRadius:10,padding:"8px 12px",maxWidth:"80%",fontSize:13,lineHeight:"1.5",color:isMe?"#c7d2fe":"#fff",wordBreak:"break-word"}}>{msg.message}</div>
+                    </div>
+                  );
+                })}
+                <div ref={chatEndRef}/>
+              </div>
+              <div style={{padding:"12px 16px",borderTop:"0.5px solid rgba(255,255,255,0.07)",display:"flex",gap:8,flexShrink:0}}>
+                <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder="Type a message..." style={{flex:1,background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+                <button onClick={sendChat} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 18px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Send</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -766,6 +807,7 @@ export default function App() {
           {id:"employees",icon:"👥",label:"Employees"},
           {id:"finance",icon:"💰",label:"Finance"},
           {id:"tasks",icon:"✅",label:"Tasks"},
+          {id:"chat",icon:"💬",label:"Chat"},
           {id:"history",icon:"🕓",label:"History"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]:[
@@ -774,6 +816,7 @@ export default function App() {
           {id:"employees",icon:"👥",label:"Employees"},
           {id:"finance",icon:"💰",label:"Finance"},
           {id:"tasks",icon:"✅",label:"Tasks"},
+          {id:"chat",icon:"💬",label:"Chat"},
           {id:"settings",icon:"⚙️",label:"Settings"}
         ]).map(nav=>{
           const isActive=activeNav===nav.id;
@@ -795,7 +838,7 @@ export default function App() {
   const Topbar = (
     <div style={{padding:"18px 26px 0",display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexShrink:0}}>
       <div>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":activeNav==="finance"?"Finance":activeNav==="tasks"?"Tasks":activeNav==="history"?"History":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.28)",marginBottom:5}}>🏠 › {activeNav==="dashboard"?"Dashboard":activeNav==="monthly"?"Monthly Sheet":activeNav==="reports"?"Analytics & Reports":activeNav==="clients"?"Clients":activeNav==="employees"?"Employees":activeNav==="finance"?"Finance":activeNav==="tasks"?"Tasks":activeNav==="chat"?"Chat":activeNav==="history"?"History":"Settings"}{activeDept!=="All"?` › ${activeDept}`:""}</div>
         <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.03em"}}>{activeDept==="All"?"All Departments":activeDept}</div>
         <div style={{fontSize:12,color:"rgba(255,255,255,0.35)",marginTop:3}}>
           <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:"#22c55e",marginRight:5,verticalAlign:"middle"}}></span>
@@ -1180,7 +1223,7 @@ export default function App() {
   const SettingsPanel = (
     <div style={{flex:1,overflowY:"auto",padding:"16px 26px"}}>
       <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"0.5px solid rgba(255,255,255,0.06)"}}>
-        {[["general","⚙️ General"],["va","👥 VA Management"],["trash","🗑️ VA Trash"],...(role==="ceo"?[["users","🔐 User Management"],["managers","🏷️ Managers"]]:[])] .map(([id,lbl])=>(
+        {[["general","⚙️ General"],["va","👥 VA Management"],["trash","🗑️ VA Trash"],...(role==="ceo"?[["users","🔐 User Management"],["managers","🏷️ Managers"],["whatsapp","📱 WhatsApp"]]:[])] .map(([id,lbl])=>(
           <button key={id} onClick={()=>setSettingsTab(id)} style={{padding:"8px 18px",fontSize:12.5,cursor:"pointer",color:settingsTab===id?"#fff":"rgba(255,255,255,0.35)",borderBottom:settingsTab===id?"2px solid #6366f1":"2px solid transparent",background:"none",border:"none",borderBottom:settingsTab===id?"2px solid #6366f1":"2px solid transparent",fontFamily:"inherit",fontWeight:settingsTab===id?500:400,marginBottom:-0.5}}>{lbl}</button>
         ))}
       </div>
@@ -1330,6 +1373,7 @@ export default function App() {
                 <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Username (for login)</div><input value={newMgr.username} onChange={e=>setNewMgr(p=>({...p,username:e.target.value}))} placeholder="e.g. onbuy" style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
                 <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Department</div><select value={newMgr.department} onChange={e=>setNewMgr(p=>({...p,department:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                 <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>PIN</div><input value={newMgr.pin} onChange={e=>setNewMgr(p=>({...p,pin:e.target.value}))} placeholder="e.g. 1234" style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                <div style={{gridColumn:"1/-1"}}><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>WhatsApp Number <span style={{color:"rgba(255,255,255,0.25)"}}>(for task notifications, e.g. 923001234567)</span></div><input value={newMgr.whatsapp} onChange={e=>setNewMgr(p=>({...p,whatsapp:e.target.value}))} placeholder="e.g. 923001234567 (no + or spaces)" style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
               </div>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={async()=>{if(!newMgr.name.trim()||!newMgr.username.trim()||!newMgr.pin.trim())return alert("Name, username and PIN required!");try{const r=await fetch(`${API}/api/managers`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(newMgr)});const d=await r.json();if(d.id){setManagers(p=>[...p,d]);setNewMgr({name:"",username:"",department:"OnBuy",pin:""});setShowAddMgr(false);}}catch(e){alert("Error: "+e.message);}}} style={{background:"#6366f1",border:"none",borderRadius:8,padding:"9px 20px",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Add Manager</button>
@@ -1350,6 +1394,7 @@ export default function App() {
                       <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Username</div><input value={editMgr.username||""} onChange={e=>setEditMgr(p=>({...p,username:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
                       <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>Department</div><select value={editMgr.department||"OnBuy"} onChange={e=>setEditMgr(p=>({...p,department:e.target.value}))} style={{width:"100%",background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}>{["OnBuy","eBay","Amazon","TikTok Shop"].map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                       <div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>PIN (visible for editing)</div><input value={editMgr.pin||""} onChange={e=>setEditMgr(p=>({...p,pin:e.target.value}))} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
+                      <div style={{gridColumn:"1/-1"}}><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:4}}>WhatsApp Number</div><input value={editMgr.whatsapp||""} onChange={e=>setEditMgr(p=>({...p,whatsapp:e.target.value}))} placeholder="e.g. 923001234567" style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/></div>
                     </div>
                     <div style={{display:"flex",gap:8}}>
                       <button onClick={async()=>{try{await fetch(`${API}/api/managers/${m.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(editMgr)});setManagers(p=>p.map(x=>x.id===m.id?{...x,...editMgr}:x));setEditMgrId(null);}catch(e){}}} style={{background:"rgba(34,197,94,0.15)",color:"#86efac",border:"none",borderRadius:7,padding:"7px 16px",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Save ✓</button>
@@ -1361,15 +1406,51 @@ export default function App() {
                     <div style={{width:36,height:36,borderRadius:9,background:`${DEPT_COLORS[m.department]||"#6366f1"}20`,border:`1px solid ${DEPT_COLORS[m.department]||"#6366f1"}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:DEPT_COLORS[m.department]||"#6366f1",flexShrink:0}}>{(m.name||"M")[0].toUpperCase()}</div>
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:500,color:"#fff"}}>{m.name}</div>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>@{m.username} · PIN: ••••</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>@{m.username} · PIN: ••••{m.whatsapp?<span style={{color:"#22c55e",marginLeft:6}}>📱 {m.whatsapp}</span>:<span style={{color:"rgba(255,255,255,0.2)",marginLeft:6}}>No WhatsApp</span>}</div>
                     </div>
                     <span style={{fontSize:10,padding:"3px 9px",borderRadius:5,background:`${DEPT_COLORS[m.department]||"#6366f1"}20`,color:DEPT_COLORS[m.department]||"#6366f1",fontWeight:600}}>{m.department}</span>
-                    <button onClick={async()=>{try{const r=await fetch(`${API}/api/managers/${m.id}`);const full=managers.find(x=>x.id===m.id);setEditMgr({name:full.name,username:full.username,department:full.department,pin:""});setEditMgrId(m.id);}catch(e){}}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                    <button onClick={async()=>{try{const full=managers.find(x=>x.id===m.id);setEditMgr({name:full.name,username:full.username,department:full.department,pin:"",whatsapp:full.whatsapp||""});setEditMgrId(m.id);}catch(e){}}} style={{background:"rgba(99,102,241,0.12)",color:"#a5b4fc",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
                     <button onClick={async()=>{if(!confirm("Delete this manager?"))return;try{await fetch(`${API}/api/managers/${m.id}`,{method:"DELETE"});setManagers(p=>p.filter(x=>x.id!==m.id));}catch(e){}}} style={{background:"rgba(239,68,68,0.1)",color:"#f87171",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>
                   </div>
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+      {settingsTab==="whatsapp"&&role==="ceo"&&(
+        <div style={{maxWidth:520}}>
+          <div style={{...card,marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>WhatsApp Task Notifications</div>
+            <div style={{fontSize:11.5,color:"rgba(255,255,255,0.35)",marginBottom:18,lineHeight:"1.6"}}>Sends a WhatsApp message to the assigned manager whenever a task is created. Uses the UltraMsg API — register free at <strong style={{color:"#a5b4fc"}}>ultramsg.com</strong> to get your credentials.</div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:5}}>Notifications</div>
+              <select value={whatsappConfig.enabled?"yes":"no"} onChange={e=>setWhatsappConfig(p=>({...p,enabled:e.target.value==="yes"}))} style={{background:"#1a1d2e",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none",minWidth:160}}>
+                <option value="no">Disabled</option>
+                <option value="yes">Enabled</option>
+              </select>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              <div>
+                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:5}}>Instance ID</div>
+                <input value={whatsappConfig.instance_id||""} onChange={e=>setWhatsappConfig(p=>({...p,instance_id:e.target.value}))} placeholder="e.g. instance12345" style={{width:"100%",background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginBottom:5}}>API Token</div>
+                <input value={whatsappConfig.token||""} onChange={e=>setWhatsappConfig(p=>({...p,token:e.target.value}))} placeholder="Your UltraMsg token" style={{width:"100%",background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+            </div>
+            <button onClick={async()=>{try{await fetch(`${API}/api/whatsapp-config`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(whatsappConfig)});alert("WhatsApp config saved!");}catch(e){alert("Save failed");}}} style={{background:"#6366f1",border:"none",borderRadius:9,padding:"10px 24px",color:"#fff",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>Save Config</button>
+          </div>
+          <div style={{background:"rgba(245,158,11,0.05)",border:"0.5px solid rgba(245,158,11,0.15)",borderRadius:12,padding:16}}>
+            <div style={{fontSize:12,fontWeight:500,color:"#fcd34d",marginBottom:8}}>Setup Steps</div>
+            <ol style={{fontSize:11.5,color:"rgba(255,255,255,0.45)",margin:0,paddingLeft:20,lineHeight:"2"}}>
+              <li>Create a free account at <strong style={{color:"#a5b4fc"}}>ultramsg.com</strong></li>
+              <li>Connect your WhatsApp by scanning the QR code</li>
+              <li>Copy your Instance ID and Token from the dashboard</li>
+              <li>Add each manager's WhatsApp number in <strong style={{color:"#a5b4fc"}}>Settings → Managers</strong></li>
+              <li>Enable notifications above and Save</li>
+            </ol>
           </div>
         </div>
       )}
@@ -3012,6 +3093,38 @@ ${vaRows}
     </div>
   );
 
+  // ── CHAT PANEL (CEO/Admin) ──
+  const ChatPanel = (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"14px 26px 12px",borderBottom:"0.5px solid rgba(255,255,255,0.06)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:15,fontWeight:600}}>💬 Team Chat</div>
+        <button onClick={fetchChat} style={{background:"rgba(255,255,255,0.06)",border:"0.5px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",borderRadius:7,padding:"6px 14px",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"16px 26px",display:"flex",flexDirection:"column",gap:10}}>
+        {chatMessages.length===0&&<div style={{textAlign:"center",color:"rgba(255,255,255,0.2)",fontSize:13,marginTop:60}}>No messages yet. Be the first to say something!</div>}
+        {chatMessages.map((msg,i)=>{
+          const isMe=msg.from_username===currentUser;
+          const rc=msg.from_role==="ceo"?"#6366f1":msg.from_role==="admin"?"#22c55e":"#f97316";
+          return (
+            <div key={msg.id||i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",marginBottom:3,display:"flex",gap:6,alignItems:"center"}}>
+                <span>{isMe?"You":msg.from_name}</span>
+                {!isMe&&<span style={{color:rc,fontSize:9,textTransform:"uppercase",fontWeight:600,background:`${rc}18`,padding:"1px 6px",borderRadius:4}}>{msg.from_role}</span>}
+                <span>· {new Date(msg.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span>
+              </div>
+              <div style={{background:isMe?"rgba(99,102,241,0.18)":"rgba(255,255,255,0.06)",border:`0.5px solid ${isMe?"rgba(99,102,241,0.3)":"rgba(255,255,255,0.08)"}`,borderRadius:12,padding:"10px 14px",maxWidth:"65%",fontSize:13,lineHeight:"1.55",color:isMe?"#c7d2fe":"#fff",wordBreak:"break-word"}}>{msg.message}</div>
+            </div>
+          );
+        })}
+        <div ref={chatEndRef}/>
+      </div>
+      <div style={{padding:"14px 26px",borderTop:"0.5px solid rgba(255,255,255,0.07)",display:"flex",gap:8,flexShrink:0}}>
+        <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder="Type a message to the team..." style={{flex:1,background:"rgba(255,255,255,0.07)",border:"0.5px solid rgba(255,255,255,0.15)",borderRadius:9,padding:"10px 14px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+        <button onClick={sendChat} style={{background:"#6366f1",border:"none",borderRadius:9,padding:"10px 24px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Send</button>
+      </div>
+    </div>
+  );
+
   // ── TASKS PANEL (CEO/Admin) ──
   const filtTasks = tasks.filter(t=>taskFilter==="All"||t.assigned_to_dept===taskFilter);
   const tStats = {total:filtTasks.length,pending:filtTasks.filter(t=>effSt(t)==="Pending").length,inProgress:filtTasks.filter(t=>effSt(t)==="In Progress").length,completed:filtTasks.filter(t=>effSt(t)==="Completed").length,overdue:filtTasks.filter(t=>effSt(t)==="Overdue").length};
@@ -3192,6 +3305,7 @@ ${vaRows}
         {activeNav==="employees"&&EmployeesPanel}
         {activeNav==="finance"&&FinancePanel}
         {activeNav==="tasks"&&TasksPanel}
+        {activeNav==="chat"&&ChatPanel}
         {activeNav==="history"&&role==="ceo"&&HistoryPanel}
         {activeNav==="settings"&&SettingsPanel}
       </div>
